@@ -63,7 +63,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>; const state = await readState();
     const project = projectFor(state, String(body.projectId || "")); const { provider, nas } = await browser(state); const root = projectMediaRoot(project);
-    if (body.action === "mkdir") {
+    if (body.action === "ensureProjectFolder") {
+      const created = await provider.ensureFolder(root);
+      return NextResponse.json({ ok: true, created });
+    } else if (body.action === "mkdir") {
       const parent = projectPath(root, body.path);
       const folder = folderName(body.name);
       await provider.createFolder(parent === root ? root + "/" + folder : parent + "/" + folder);

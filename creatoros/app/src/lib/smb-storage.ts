@@ -7,7 +7,7 @@ import type { NasConfig } from "@/lib/model";
 import { safeRelativePath } from "@/lib/storage-paths";
 
 type SmbEntry = { name: string; directory: boolean; size: number };
-type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string; entries?: SmbEntry[] };
+type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string; entries?: SmbEntry[]; created?: boolean };
 type SmbCommand = { operation: string; config: NasConfig; password: string; path?: string; to?: string; size?: number; range?: string };
 export type SmbRunner = (command: SmbCommand, body?: ReadableStream<Uint8Array>) => Promise<{ metadata: SmbResult; body?: ReadableStream<Uint8Array> }>;
 
@@ -86,4 +86,5 @@ export class SmbStorageProvider implements StorageProvider {
   async moveFile(from: string, to: string) { await this.call("move", { path: from, to }); }
   async listFolder(relativePath: string): Promise<SmbEntry[]> { return (await this.call("list", { path: relativePath })).metadata.entries || []; }
   async createFolder(relativePath: string) { await this.call("mkdir", { path: relativePath }); }
+  async ensureFolder(relativePath: string): Promise<boolean> { return (await this.call("ensure", { path: relativePath })).metadata.created === true; }
 }

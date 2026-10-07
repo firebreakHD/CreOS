@@ -103,7 +103,7 @@ Der AI-Chat ist ein globaler Badge unten rechts, der den Chat ein- und ausklappt
 
 Neue Medien werden in einer optionalen SMB-Freigabe als normale Dateien/Ordner gespeichert. Der angezeigte UNC-Pfad muss direkt im Windows Explorer und in CapCut nutzbar sein. Bei bestehendem WebDAV bleiben alte Verweise erhalten, bis der Nutzer bewusst auf SMB wechselt.
 
-Der Projekt-Tab **Material** ist ein kompakter SMB-Dateibrowser für den Projektordner. Er zeigt auch Inhalte, die manuell im Explorer angelegt wurden, erlaubt Ordnererstellung und Umbenennung und unterstützt Drag-and-drop zum Verschieben von Dateien und Ordnern innerhalb des Projekts. Das bestehende seitliche Medienpanel für Upload, Zuordnung und Vorschau bleibt unverändert. Der Tab **Content** heißt **Upload Infos**.
+Der Projekt-Tab **Material** ist ein kompakter SMB-Dateibrowser für den Projektordner. Er zeigt auch Inhalte, die manuell im Explorer angelegt wurden, erlaubt Ordnererstellung und Umbenennung und unterstützt Drag-and-drop zum Verschieben von Dateien und Ordnern innerhalb des Projekts. **Projektordner prüfen / anlegen** legt den Ordner nur an, wenn er fehlt; ein vorhandener Ordner samt Dateien bleibt unverändert. Das bestehende seitliche Medienpanel für Upload, Zuordnung und Vorschau bleibt unverändert. Der Tab **Content** heißt **Upload Infos**.
 
 Speichern zeigt Erfolg, Fortschritt oder einen verständlichen Fehler. Eingaben bleiben bei einem Fehler bestehen und Dialoge schließen erst nach erfolgreichem Speichern. Ein Panel-Button muss dessen Öffnen/Schließen sichtbar umsetzen. Ein dekoratives Element erhält keine falsche Button- oder Dropdown-Anmutung.
 

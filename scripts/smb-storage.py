@@ -78,7 +78,16 @@ def operate(command, source, output, client):
                 client.remove(probe, **options)
         return {"ok": True}
 
-    target = checked(command["path"], operation in ("put", "move"))
+    target = checked(command["path"], operation in ("put", "move", "ensure"))
+    if operation == "ensure":
+        try:
+            client.mkdir(target, **options)
+            return {"ok": True, "created": True}
+        except FileExistsError:
+            info = client.lstat(target, **options)
+            if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+                raise StorageFailure("Der Projektpfad ist kein Ordner.", 409)
+            return {"ok": True, "created": False}
     if operation == "put":
         size = command["size"]
         if not isinstance(size, int) or size <= 0 or size > MAX_BYTES:

@@ -3424,6 +3424,7 @@ button,select {
 .project-file-browser { display:grid; gap:14px; padding:18px; border:1px solid var(--line-soft); border-radius:14px; background:#101824; }
 .project-browser-header,.project-browser-location,.project-browser-crumbs,.project-browser-crumbs span { display:flex; align-items:center; gap:8px; }
 .project-browser-header,.project-browser-location { justify-content:space-between; }
+.project-browser-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 .project-browser-header h2 { margin:3px 0; font-size:21px; }
 .project-browser-header p,.project-browser-hint { margin:0; color:var(--sub); font-size:13px; }
 .project-browser-crumbs { flex-wrap:wrap; min-width:0; }
@@ -3448,6 +3449,7 @@ button,select {
 @media (max-width:650px) {
   .project-file-browser { padding:12px; }
   .project-browser-header { align-items:flex-start; flex-direction:column; }
+  .project-browser-actions { justify-content:flex-start; }
   .project-browser-location { align-items:flex-start; flex-direction:column; }
   .project-browser-list-head,.project-browser-row { grid-template-columns:minmax(0,1fr) 72px 44px; gap:5px; padding-inline:6px; }
   .project-browser-meta { font-size:12px; }
