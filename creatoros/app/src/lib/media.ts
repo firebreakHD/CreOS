@@ -27,7 +27,7 @@ export async function uploadMedia(request: Request, actor: "user" | "ai" = "user
   const size = Number(request.headers.get("x-file-size"));
   if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_UPLOAD_BYTES || !request.body) throw new StorageError("Die Datei muss zwischen 1 Byte und 500 MB groß sein.", 413);
   if (state.media.length >= 5000) throw new StorageError("Die Medienübersicht enthält zu viele Dateien.", 409);
-  const mediaId = id(); const relativePath = readableMediaPath(project, entityType === "task", filename, mimeType, mediaId);
+  const mediaId = id(); const relativePath = readableMediaPath(project, entityType === "task", filename, mimeType, mediaId, role as MediaRole);
   const provider = await storageProvider(state);
   const media: MediaRecord = { id: mediaId, originalFilename: filename, displayName: filename, mimeType, fileSize: size, storageProvider: state.integrations.nas.enabled ? "nas" : "local", storageId: state.integrations.nas.enabled ? state.integrations.nas.storageId : "local", relativePath, createdAt: now(), links: [{ entityType: entityType as "project" | "task", entityId, role: role as MediaRole }] };
   await provider.storeFile(relativePath, request.body, size, mimeType);

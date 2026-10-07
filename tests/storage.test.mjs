@@ -22,7 +22,7 @@ test("local files stream, preserve readable names, support ranges and reject uns
   try {
     const provider = new LocalStorageProvider(directory);
     const relative = readableMediaPath(initialState().projects[0], true, "Thumbnail v2.jpg", "image/jpeg", "a83fabcd-rest");
-    assert.match(relative, /^Media\/Projects\/.+\/Tasks\/Images\/\d{4}-\d{2}-\d{2}_Thumbnail v2_a83fabcd\.jpg$/);
+    assert.match(relative, /^.+\/Aufgaben\/Assets\/Images\/\d{4}-\d{2}-\d{2}_Thumbnail v2_a83fabcd\.jpg$/);
     await provider.storeFile(relative, stream("abcdef"), 6, "image/jpeg");
     assert.equal(await new Response((await provider.getFile(relative)).body).text(), "abcdef");
     const range = await provider.getFile(relative, "bytes=1-3");

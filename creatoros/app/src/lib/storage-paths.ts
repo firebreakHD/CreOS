@@ -15,14 +15,19 @@ export function safeName(value: string, max = 90) {
 }
 export function projectMediaRoot(project: Project) {
   const folder = project.storageFolder && !/[\\/]/.test(project.storageFolder) && project.storageFolder !== "." && project.storageFolder !== ".." ? project.storageFolder : safeName(project.title) + "_" + project.id.replace(/[^a-zA-Z0-9]/g, "").slice(-6);
-  return safeRelativePath("Media/Projects/" + folder);
+  return safeRelativePath(folder);
 }
-export function readableMediaPath(project: Project | null, task: boolean, filename: string, mimeType: string, mediaId: string) {
+export const projectMediaFolders = (project: Project) => {
+  const root = projectMediaRoot(project);
+  return [root, ...["Assets", "Rohmaterial", "Export"].map((folder) => root + "/" + folder)];
+};
+export function readableMediaPath(project: Project | null, task: boolean, filename: string, mimeType: string, mediaId: string, role: "asset" | "reference" | "raw" | "export" | "other" = "asset") {
   const folder = mimeType.startsWith("image/") ? "Images" : mimeType.startsWith("video/") ? "Video" : mimeType.startsWith("audio/") ? "Audio" : "Documents";
   const date = new Date().toISOString().slice(0, 10);
-  const base = project ? projectMediaRoot(project) : "Media/Tasks/Attachments";
+  const base = project ? projectMediaRoot(project) : "Aufgaben/Attachments";
+  const roleFolder = { asset: "Assets", reference: "Referenzen", raw: "Rohmaterial", export: "Export", other: "Sonstiges" }[role];
   const clean = safeName(filename, 140); const dot = clean.lastIndexOf(".");
   const name = dot > 0 ? clean.slice(0, dot) : clean; const extension = dot > 0 ? clean.slice(dot) : "";
-  return safeRelativePath(base + "/" + (task ? "Tasks/" : "") + folder + "/" + date + "_" + name + "_" + mediaId.slice(0, 8) + extension);
+  return safeRelativePath(base + (task ? "/Aufgaben" : "") + "/" + roleFolder + "/" + folder + "/" + date + "_" + name + "_" + mediaId.slice(0, 8) + extension);
 }
 export const mediaUrl = (media: Pick<MediaRecord, "id">) => "/api/media/" + encodeURIComponent(media.id) + "/file";

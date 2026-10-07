@@ -150,7 +150,7 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     const uploaded = await upload("Referenz v2.txt", "abcdef");
     const media = uploaded.media;
     assert.equal(media.storageProvider, "local"); assert.equal(media.links[0].entityId, taskId);
-    assert.match(media.relativePath, /Pipeline-Test.+Tasks\/Documents\/.*Referenz v2/);
+    assert.match(media.relativePath, /Pipeline-Test.+\/Aufgaben\/Referenzen\/Documents\/.*Referenz v2/);
     const file = await fetch(running.url + "/api/media/" + media.id + "/file", { headers: { Range: "bytes=1-3" } });
     assert.equal(file.status, 206); assert.equal(file.headers.get("content-range"), "bytes 1-3/6"); assert.equal(await file.text(), "bcd");
     await upload("../outside.txt", "abc", 400);

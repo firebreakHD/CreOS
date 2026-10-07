@@ -177,11 +177,11 @@ export default function CreatorApp() {
     else history.replaceState(null, "", `${window.location.pathname}?mode=focus`);
   };
 
-  const mutate = async (url: string, method: "POST" | "PATCH", body: unknown) => {
+  const mutate = async (url: string, method: "POST" | "PATCH", body: unknown, timeoutMs = 10000) => {
     setBusy(true);
     try {
-      const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
-      const payload = await responseState(response) as { state?: CreatorState; project?: Project; session?: Session; result?: { convertedProjectId?: string } };
+      const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
+      const payload = await responseState(response) as { state?: CreatorState; project?: Project; folderNotice?: string; session?: Session; result?: { convertedProjectId?: string } };
       if (payload.state) applyState(payload.state);
       return payload;
     } catch (error) {
@@ -217,8 +217,8 @@ export default function CreatorApp() {
   };
 
   const createProject = async (title: string, pipeline: Project["pipeline"]) => {
-    const result = await mutate("/api/projects", "POST", { title: title.trim(), pipeline });
-    if (result?.project) { setSelectedProjectId(result.project.id); go("project"); notify("Projekt ist bereit. Leg deinen ersten kleinen Schritt fest."); }
+    const result = await mutate("/api/projects", "POST", { title: title.trim(), pipeline }, 30000);
+    if (result?.project) { setSelectedProjectId(result.project.id); go("project"); notify(result.folderNotice || "Projekt ist bereit. Leg deinen ersten kleinen Schritt fest."); }
     return Boolean(result?.project);
   };
 

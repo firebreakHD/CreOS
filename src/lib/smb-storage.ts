@@ -7,8 +7,8 @@ import type { NasConfig } from "@/lib/model";
 import { safeRelativePath } from "@/lib/storage-paths";
 
 type SmbEntry = { name: string; directory: boolean; size: number };
-type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string; entries?: SmbEntry[]; created?: boolean };
-type SmbCommand = { operation: string; config: NasConfig; password: string; path?: string; to?: string; size?: number; range?: string };
+type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string; entries?: SmbEntry[]; created?: boolean; createdPaths?: string[] };
+type SmbCommand = { operation: string; config: NasConfig; password: string; path?: string; paths?: string[]; to?: string; size?: number; range?: string };
 export type SmbRunner = (command: SmbCommand, body?: ReadableStream<Uint8Array>) => Promise<{ metadata: SmbResult; body?: ReadableStream<Uint8Array> }>;
 
 export const runSmb: SmbRunner = async (command, body) => {
@@ -72,6 +72,7 @@ export class SmbStorageProvider implements StorageProvider {
   constructor(config: NasConfig, password: string, runner: SmbRunner = runSmb) { this.config = config; this.password = password; this.runner = runner; }
   private call(operation: string, values: Partial<SmbCommand> = {}, body?: ReadableStream<Uint8Array>) {
     if (values.path) safeRelativePath(values.path); if (values.to) safeRelativePath(values.to);
+    values.paths?.forEach(safeRelativePath);
     return this.runner({ operation, config: this.config, password: this.password, ...values }, body);
   }
   async test() { await this.call("test"); }
@@ -87,4 +88,5 @@ export class SmbStorageProvider implements StorageProvider {
   async listFolder(relativePath: string): Promise<SmbEntry[]> { return (await this.call("list", { path: relativePath })).metadata.entries || []; }
   async createFolder(relativePath: string) { await this.call("mkdir", { path: relativePath }); }
   async ensureFolder(relativePath: string): Promise<boolean> { return (await this.call("ensure", { path: relativePath })).metadata.created === true; }
+  async ensureFolders(relativePaths: string[]): Promise<string[]> { return (await this.call("ensure_many", { paths: relativePaths })).metadata.createdPaths || []; }
 }

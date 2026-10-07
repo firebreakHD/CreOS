@@ -109,7 +109,7 @@ export function validateNas(input: Partial<NasConfig>): NasConfig {
     if (input.domain && (input.domain.length > 100 || /[\\/\x00-\x1f]/.test(input.domain))) throw new StorageError("SMB-Domäne ist ungültig.", 400);
   }
   if (!input.username || input.username.length > 200 || /[:\r\n]/.test(input.username)) throw new StorageError("NAS-Benutzername fehlt oder ist ungültig.", 400);
-  const folder = input.baseFolder?.replace(/^\/+|\/+$/g, "") || "";
+  const folder = input.baseFolder?.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "") || "";
   if (folder) safeRelativePath(folder);
   return { ...input, baseFolder: (input.protocol === "smb" ? "" : "/") + folder } as NasConfig;
 }

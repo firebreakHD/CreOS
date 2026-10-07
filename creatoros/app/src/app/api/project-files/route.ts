@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { projectMediaRoot, safeRelativePath, smbExplorerPath } from "@/lib/storage-paths";
+import { projectMediaRoot, projectMediaFolders, safeRelativePath, smbExplorerPath } from "@/lib/storage-paths";
 import { readState, updateState } from "@/lib/store";
 import { configuredNas, StorageError } from "@/lib/storage";
 import { SmbStorageProvider } from "@/lib/smb-storage";
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>; const state = await readState();
     const project = projectFor(state, String(body.projectId || "")); const { provider, nas } = await browser(state); const root = projectMediaRoot(project);
     if (body.action === "ensureProjectFolder") {
-      const created = await provider.ensureFolder(root);
-      return NextResponse.json({ ok: true, created });
+      const createdPaths = await provider.ensureFolders(projectMediaFolders(project));
+      return NextResponse.json({ ok: true, createdPaths });
     } else if (body.action === "mkdir") {
       const parent = projectPath(root, body.path);
       const folder = folderName(body.name);

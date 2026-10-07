@@ -57,7 +57,7 @@ export function ProjectFileBrowser({ data, project, onState }: { data: CreatorSt
       const response = await fetch("/api/project-files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.id, ...body }) }); const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Ordneraktion fehlgeschlagen.");
       if (payload.state) onState(payload.state);
-      await load(); setMessage(body.action === "ensureProjectFolder" ? payload.created ? "Projektordner wurde angelegt. Vorhandene Inhalte bleiben erhalten." : "Projektordner ist bereits vorhanden. Nichts wurde verändert." : body.action === "mkdir" ? "Ordner erstellt." : body.action === "rename" ? "Ordner umbenannt." : "Element verschoben.");
+      await load(); setMessage(body.action === "ensureProjectFolder" ? payload.createdPaths?.length ? "Projektordnerstruktur ergänzt. Vorhandene Inhalte bleiben erhalten." : "Projektordner mit Assets, Rohmaterial und Export ist bereits vorhanden. Nichts wurde verändert." : body.action === "mkdir" ? "Ordner erstellt." : body.action === "rename" ? "Ordner umbenannt." : "Element verschoben.");
       return true;
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ordneraktion fehlgeschlagen."); return false; }
     finally { setBusy(false); }

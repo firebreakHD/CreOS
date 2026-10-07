@@ -128,22 +128,26 @@ UI und AI verwenden dieselbe serverseitige Action-Schicht. `/api/actions` nimmt 
 ### NAS / Medienspeicher
 
 1. Auf der NAS eine SMB-Freigabe und einen Benutzer mit Lese-/Schreibzugriff anlegen.
-2. Host/IP, Freigabename, Benutzer, Passwort und optionalen Unterordner in CreatorOS speichern. Die Freigabe ist ein gewöhnlicher Explorer-Ordner; der UNC-Pfad wird in CreatorOS angezeigt und kann für CapCut kopiert werden.
-3. **Verbindung testen** prüft Zugriff und Schreibbarkeit im Basisordner. Beim Upload entstehen normale projektbezogene Unterordner innerhalb der Freigabe.
-4. Im Projekt **Material** den Projektordner prüfen/anlegen und Dateien im Browser ansehen oder unter **Anhänge & Referenzen** Dateien ablegen bzw. auswählen. Bei eingerichteter NAS werden Dateien dort gestreamt; ohne NAS im lokalen Datenordner `media/`. Bei NAS-Ausfall bleibt der Upload mit erneuter Versuchsmöglichkeit erhalten und speichert nicht unbemerkt lokal.
+2. Host/IP, Freigabename, Benutzer, Passwort und optionalen Unterordner in CreatorOS speichern. Der angegebene Unterordner ist der direkte Medien-Root; der UNC-Pfad wird angezeigt und kann für CapCut kopiert werden.
+3. **Verbindung testen** prüft Zugriff und Schreibbarkeit im Root. Beim Anlegen eines Projekts werden darin der Projektordner und `Assets`, `Rohmaterial` sowie `Export` erstellt, ohne vorhandene Inhalte zu löschen.
+4. Im Projekt **Material** Dateien im Browser ansehen, Ordner ergänzen oder umbenennen und Inhalte im Projekt verschieben. Uploads werden entsprechend ihrer Medienrolle einsortiert. Bei NAS werden Dateien dort gespeichert; ohne NAS im lokalen Datenordner `media/`.
 
 Der Storage-Provider unterstützt `storeFile`, `getFile`, `deleteFile`, `moveFile`, Verzeichnislisten und Ordnererstellung. SMB arbeitet im Add-on über den beschränkten Python-Helfer und die SMB-Bibliothek; Zugangsdaten gehen nicht an den Browser und erscheinen nicht in Explorer-Pfaden. Absolute Pfade und Traversal werden abgelehnt. Dateiübertragung: maximal 500 MB, erlaubte Bild-/Video-/Audio-/PDF-/Text-/Office-/ZIP-Typen, keine ausführbaren Dateien oder HTML/SVG. Office/ZIP werden nicht ausgeführt oder entpackt. Alte WebDAV-Datensätze bleiben für bestehende Speicherreferenzen unterstützt.
 
-Beispielstruktur unter dem konfigurierten Root:
+Beispielstruktur direkt unter dem konfigurierten Root:
 
 ```text
-CreatorOS/
-  Media/Projects/LEGO – Oktober Comeback_a83fab/
+LEGO – Oktober Comeback_a83fab/
+  Assets/
     Images/2026-10-07_thumbnail_f31c9e22.jpg
-    Tasks/Documents/2026-10-07_Skript-Entwurf_c4d82a61.txt
+  Rohmaterial/
+    Video/2026-10-07_challenge_349d1f2a.mp4
+  Export/
+  Aufgaben/
+    Assets/Documents/2026-10-07_Skript-Entwurf_c4d82a61.txt
 ```
 
-Ordner und ursprüngliche Dateinamen bleiben lesbar; kurze IDs vermeiden Kollisionen. Projekt und Content nutzen bereits dasselbe Datenmodell, deshalb entsteht kein zweiter paralleler Content-Speicher. Ordner werden nur bei Bedarf erzeugt.
+Ordner und ursprüngliche Dateinamen bleiben lesbar; kurze IDs vermeiden Kollisionen. Projekt und Content nutzen bereits dasselbe Datenmodell, deshalb entsteht kein zweiter paralleler Content-Speicher.
 
 **Referenzen:** Projekt/Aufgabe → Media-ID → Storage-Datensatz mit Provider, Speicher-ID und relativem Pfad. Beziehungen bleiben bei Projekt-/Aufgabenänderungen erhalten. `moveFile` bereitet spätere Umbenennung vor; eine Dateiverschiebe-UI ist noch nicht vorhanden. Externe Umbenennungen auf der NAS müssen später am Storage-Datensatz angepasst werden und werden nicht automatisch erkannt.
 

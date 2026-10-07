@@ -16,6 +16,9 @@ class StorageFailure(Exception):
         super().__init__(message)
         self.status = status
 
+def has_errno(error, number):
+    return isinstance(error, OSError) and getattr(error, "errno", None) == number
+
 def relative(value, empty=False):
     if empty and value == "":
         return value
@@ -50,12 +53,15 @@ def operate(command, source, output, client):
                 info = client.lstat(current, **options)
                 if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                     raise StorageFailure("SMB-Dateiverknüpfungen sind nicht erlaubt.", 400)
-            except FileNotFoundError:
+            except OSError as error:
+                if not has_errno(error, errno.ENOENT):
+                    raise
                 if create and index < len(all_parts) - 1:
                     try:
                         client.mkdir(current, **options)
-                    except FileExistsError:
-                        pass
+                    except OSError as create_error:
+                        if not has_errno(create_error, errno.EEXIST):
+                            raise
                     info = client.lstat(current, **options)
                     if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                         raise StorageFailure("Ungültiger SMB-Ordner.", 400)
@@ -78,16 +84,28 @@ def operate(command, source, output, client):
                 client.remove(probe, **options)
         return {"ok": True}
 
-    target = checked(command["path"], operation in ("put", "move", "ensure"))
-    if operation == "ensure":
+    def ensure_directory(part):
+        target = checked(part, True)
         try:
             client.mkdir(target, **options)
-            return {"ok": True, "created": True}
-        except FileExistsError:
+            return True
+        except OSError as error:
+            if not has_errno(error, errno.EEXIST):
+                raise
             info = client.lstat(target, **options)
             if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                 raise StorageFailure("Der Projektpfad ist kein Ordner.", 409)
-            return {"ok": True, "created": False}
+            return False
+    if operation == "ensure_many":
+        paths = command.get("paths")
+        if not isinstance(paths, list) or not paths or len(paths) > 20:
+            raise StorageFailure("Ungültige Projektordnerliste.", 400)
+        created = [part for part in paths if ensure_directory(part)]
+        return {"ok": True, "createdPaths": created}
+    if operation == "ensure":
+        return {"ok": True, "created": ensure_directory(command["path"])}
+
+    target = checked(command["path"], operation in ("put", "move"))
     if operation == "list":
         if not stat.S_ISDIR(client.stat(target, **options).st_mode):
             raise StorageFailure("Der Projektpfad ist kein Ordner.", 404)
@@ -171,8 +189,9 @@ def operate(command, source, output, client):
     if operation == "delete":
         try:
             client.remove(target, **options)
-        except FileNotFoundError:
-            pass
+        except OSError as error:
+            if not has_errno(error, errno.ENOENT):
+                raise
         if command["path"].startswith(("Media/Projects/", "Media/Tasks/")):
             parts = command["path"].split("/")[:-1]
             while len(parts) > 2:
@@ -203,10 +222,12 @@ def main():
             message, status_code = str(error), error.status
         elif isinstance(error, ModuleNotFoundError):
             message, status_code = "SMB-Laufzeit fehlt. Bitte das aktuelle Add-on installieren.", 503
-        elif isinstance(error, FileNotFoundError):
+        elif has_errno(error, errno.ENOENT):
             message, status_code = "SMB-Datei oder Basisordner ist nicht verfügbar.", 404
-        elif isinstance(error, FileExistsError):
+        elif has_errno(error, errno.EEXIST):
             message, status_code = "Dateiname existiert bereits.", 409
+        elif has_errno(error, errno.ENOTDIR):
+            message, status_code = "Ein Teil des SMB-Pfads ist kein Ordner.", 404
         elif isinstance(error, PermissionError) or getattr(error, "errno", None) in (errno.EACCES, errno.EPERM):
             message, status_code = "SMB-Anmeldung oder Schreibberechtigung fehlt.", 502
         else:
