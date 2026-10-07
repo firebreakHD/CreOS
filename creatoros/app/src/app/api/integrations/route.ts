@@ -7,7 +7,23 @@ import { StorageError } from "@/lib/storage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
-  try { return NextResponse.json(await integrationView(await readState()), { headers: { "Cache-Control": "no-store" } }); }
+  try {
+    const state = await readState();
+    const view = await integrationView(state);
+    let codexModels: { model: string; displayName: string; isDefault: boolean }[] = [];
+    let codexModelsError = "";
+    if (state.integrations.ai.enabled && state.integrations.ai.provider === "codex" && view.ai.credentialStored) {
+      try {
+        const result = await (await import("@/lib/codex")).codexClient().request("model/list", {});
+        codexModels = (Array.isArray(result?.data) ? result.data : []).flatMap((item: any) => {
+          const model = typeof item?.model === "string" ? item.model : typeof item?.id === "string" ? item.id : "";
+          if (!/^[a-zA-Z0-9_.:-]{1,100}$/.test(model)) return [];
+          return [{ model, displayName: typeof item.displayName === "string" ? item.displayName : model, isDefault: item.isDefault === true }];
+        }).slice(0, 100);
+      } catch { codexModelsError = "Codex-Modellliste konnte nicht geladen werden. Bitte Anmeldung prüfen und erneut laden."; }
+    }
+    return NextResponse.json({ ...view, codexModels, codexModelsError }, { headers: { "Cache-Control": "no-store" } });
+  }
   catch { return NextResponse.json({ error: "Integrationen konnten nicht gelesen werden." }, { status: 500 }); }
 }
 export async function POST(request: Request) {

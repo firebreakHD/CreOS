@@ -1,7 +1,7 @@
 name: CreatorOS
 slug: creatoros
 description: Persönlicher Start- und Produktionsassistent für Creator.
-version: 0.1.13
+version: 0.1.15
 startup: application
 boot: auto
 init: false

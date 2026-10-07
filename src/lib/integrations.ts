@@ -80,7 +80,7 @@ export async function testIntegration(kind: "ai" | "nas") {
       if (!hasCredential) throw new Error("Bitte mit deinem Codex-Abonnement anmelden.");
       const models = await codexClient().request("model/list", {});
       if (!models.data?.some((model: { model: string }) => model.model === current.integrations.ai.model)) throw new Error("Modell ist für diese Codex-Anmeldung nicht verfügbar. Bitte Modell-ID ändern.");
-      message = "Codex-Anmeldung und Modell bestätigt.";
+      message = "Codex-Anmeldung und Modell im Katalog gefunden. Der Zugriff wird bei der Anfrage geprüft.";
     } else if (kind === "ai") await testOpenAi(current.integrations.ai);
     else {
       const config = validateNas(current.integrations.nas);

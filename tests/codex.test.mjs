@@ -28,6 +28,7 @@ let account=null,tools=[],phase=0;const send=(x)=>process.stdout.write(JSON.stri
 readline.createInterface({input:process.stdin}).on('line',(line)=>{const x=JSON.parse(line);const reply=(result)=>send({id:x.id,result});
  if(x.method==='initialize') return reply({});
  if(x.method==='account/read') return reply({account,requiresOpenaiAuth:true});
+ if(x.method==='model/list') return reply({data:[{model:'gpt-5.4',displayName:'GPT-5.4',isDefault:true}]});
  if(x.method==='account/login/start') {reply(x.params.type==='chatgptDeviceCode'?{type:x.params.type,loginId:'test-login',verificationUrl:'https://auth.openai.com/codex/device',userCode:'ABCD-1234'}:{type:x.params.type,loginId:'test-login',authUrl:'https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=nonce'}); setTimeout(()=>{account={type:'chatgpt',email:'test@example.test',planType:'plus'};fs.writeFileSync(path.join(process.env.CODEX_HOME,'auth.json'),JSON.stringify({tokens:{access_token:'only-test-token',refresh_token:'only-test-refresh'}}));send({method:'account/login/completed',params:{loginId:'test-login',success:true}});},30);return;}
  if(x.method==='account/login/cancel') return reply({status:'canceled'});
  if(x.method==='account/logout') {account=null;fs.rmSync(path.join(process.env.CODEX_HOME,'auth.json'),{force:true});return reply({});}
@@ -45,6 +46,7 @@ readline.createInterface({input:process.stdin}).on('line',(line)=>{const x=JSON.
     const completed=once(client.events,"account/login/completed");
     const login=await client.login("chatgptDeviceCode"); assert.equal(login.login.userCode,"ABCD-1234"); await completed;
     assert.equal((await client.status()).connected,true);
+    assert.equal((await client.request('model/list',{})).data[0].model,'gpt-5.4');
     const state=await readState(); assert.ok(state.integrations.ai.secretId);
     assert.equal(JSON.parse((await readSecret(state.integrations.ai.secretId)).codexAuth).tokens.access_token,"only-test-token");
     assert.ok(!(await readFile(path.join(directory,"integrations.vault.json"),"utf8")).includes("only-test-token"));
