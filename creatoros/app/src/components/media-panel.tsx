@@ -2,8 +2,9 @@
 import { useRef, useState } from "react";
 import { Download, File, Grid2X2, List, Plus, RefreshCw, Upload, X } from "lucide-react";
 import type { CreatorState, MediaRecord, MediaRole } from "@/lib/model";
-import { mediaUrl } from "@/lib/storage-paths";
+import { mediaUrl, smbExplorerPath } from "@/lib/storage-paths";
 import { manualAction } from "@/lib/client-api";
+import { EntityActions } from "@/components/entity-menu";
 
 const roleLabels: Record<MediaRole, string> = { asset: "Asset", reference: "Referenz", raw: "Rohmaterial", export: "Export", other: "Sonstiges" };
 const sizeLabel = (size: number) => size >= 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + " MB" : Math.ceil(size / 1024) + " KB";
@@ -52,22 +53,24 @@ export function MediaPanel({ data, entityType = "project", entityId, onState, co
     </div>
     {error && <div className="brain-error" role="alert">{error}{retryFiles.length > 0 && <button className="button-secondary" disabled={working} onClick={() => void upload(retryFiles)}><RefreshCw size={16}/> Erneut versuchen</button>}</div>}
     {available.length > 0 && <div className="existing-media"><label>Vorhandenes Medium<select value={existing} onChange={(event) => setExisting(event.target.value)}><option value="">Auswählen …</option>{available.map((media) => <option key={media.id} value={media.id}>{media.displayName}</option>)}</select></label><button className="button-secondary" disabled={!existing || working} onClick={() => void attach()}><Plus size={17}/> Zuordnen</button></div>}
-    <div className="media-grid">{linked.map((media) => <MediaCard key={media.id} media={media} role={media.links.find((link) => link.entityType === entityType && link.entityId === entityId)?.role} onDetach={() => void detach(media.id)}/>)}</div>
+    <div className="media-grid">{linked.map((media) => <MediaCard key={media.id} data={data} onState={onState} media={media} role={media.links.find((link) => link.entityType === entityType && link.entityId === entityId)?.role} onDetach={() => void detach(media.id)}/>)}</div>
     {!linked.length && <p className="media-empty">Noch keine Dateien zugeordnet. Bestehende Materialnotizen bleiben erhalten.</p>}
   </section>;
 }
 
-export function MediaCard({ media, role, onDetach, linkedLabels }: { media: MediaRecord; role?: MediaRole; onDetach?: () => void; linkedLabels?: string[] }) {
+export function MediaCard({ data, onState, media, role, onDetach, linkedLabels }: { data: CreatorState; onState: (state: CreatorState) => void; media: MediaRecord; role?: MediaRole; onDetach?: () => void; linkedLabels?: string[] }) {
   const [failed, setFailed] = useState(false); const [attempt, setAttempt] = useState(0);
   const url = mediaUrl(media) + "?preview=" + attempt;
-  return <article className="media-card">
+  const explorer = media.storageProvider === "nas" && media.storageId === data.integrations.nas.storageId ? smbExplorerPath(data.integrations.nas,media.relativePath) : "";
+  const [copyMessage,setCopyMessage] = useState("");
+  return <EntityActions name={media.displayName} onRename={(name) => manualAction({ name: "renameMedia",args: { id: media.id,name } },onState)} onDelete={() => manualAction({ name: "deleteMedia",args: { id: media.id,confirm: true } },onState)} deleteDescription={`Die tatsächliche Datei dauerhaft aus ${media.storageProvider === "nas" ? "dem NAS-Ordner" : "dem lokalen Medienordner"} löschen. Alle Projekt- und Aufgabenverknüpfungen werden ebenfalls entfernt. Das lässt sich nicht rückgängig machen.`} actions={[{ label: "Datei öffnen",run: () => { window.open(mediaUrl(media),"_blank","noopener,noreferrer"); } },...(explorer ? [{ label: "Explorer-Pfad kopieren",run: () => { void navigator.clipboard.writeText(explorer).then(() => setCopyMessage("Explorer-Pfad kopiert.")).catch(() => setCopyMessage("Kopieren nicht möglich: " + explorer)); } }] : []),...(onDetach ? [{ label: "Zuordnung entfernen · Datei behalten",run: onDetach }] : [])]}><article className="media-card">
     <div className="media-preview">{failed ? <div><File size={26}/><span>Momentan nicht verfügbar</span><button className="button-ghost" onClick={() => { setFailed(false); setAttempt(attempt + 1); }}><RefreshCw size={16}/> Erneut laden</button></div> : media.mimeType.startsWith("image/") ? <img src={url} alt={media.displayName} loading="lazy" onError={() => setFailed(true)}/> : media.mimeType.startsWith("video/") ? <video src={url} controls preload="metadata" onError={() => setFailed(true)}/> : media.mimeType.startsWith("audio/") ? <audio src={url} controls preload="metadata" onError={() => setFailed(true)}/> : <File size={30}/>}</div>
     <div className="media-card-copy"><b>{media.displayName}</b><small>{sizeLabel(media.fileSize)} · {role ? roleLabels[role] : media.storageProvider === "nas" ? "NAS" : "Lokal"}</small><small>{new Date(media.createdAt).toLocaleDateString("de-AT")}</small>{linkedLabels && <small>{linkedLabels.length ? linkedLabels.join(" · ") : "Ohne Zuordnung"}</small>}</div>
-    <div className="media-card-actions"><a className="button-ghost" href={mediaUrl(media)} target="_blank" rel="noopener noreferrer"><Download size={16}/> Öffnen</a>{onDetach && <button className="icon-quiet" aria-label="Zuordnung entfernen; Datei behalten" title="Zuordnung entfernen; Datei bleibt in der Medienübersicht" onClick={onDetach}><X size={17}/></button>}</div>
-  </article>;
+    <small className="context-help">Rechtsklick / lange drücken für Dateiaktionen</small>{copyMessage && <small role="status">{copyMessage}</small>}
+  </article></EntityActions>;
 }
 
-export function MediaLibrary({ data }: { data: CreatorState }) {
+export function MediaLibrary({ data, onState }: { data: CreatorState; onState: (state: CreatorState) => void }) {
   const [search, setSearch] = useState(""); const [type, setType] = useState(""); const [projectId, setProjectId] = useState(""); const [list, setList] = useState(false);
   const [linkedType, setLinkedType] = useState(""); const [since, setSince] = useState("");
   const labels = (media: MediaRecord) => media.links.map((link) => link.entityType === "project" ? "Projekt: " + (data.projects.find((item) => item.id === link.entityId)?.title || "Nicht verfügbar") : "Aufgabe: " + (data.tasks.find((item) => item.id === link.entityId)?.title || "Nicht verfügbar"));
@@ -75,6 +78,6 @@ export function MediaLibrary({ data }: { data: CreatorState }) {
   return <section><div className="screen-heading"><div><div className="eyebrow">DEINE DATEIEN</div><h1>Medien</h1><p>Assets, Referenzen und Rohmaterial. Neue Dateien lädst du direkt im Projekt oder in einer Aufgabe hoch.</p></div></div>
     <div className="media-filters"><input aria-label="Medien suchen" placeholder="Dateiname suchen …" value={search} onChange={(event) => setSearch(event.target.value)}/><select aria-label="Dateityp" value={type} onChange={(event) => setType(event.target.value)}><option value="">Alle Dateitypen</option><option value="image/">Bilder</option><option value="video/">Video</option><option value="audio/">Audio</option><option value="application/">Dokumente</option></select><select aria-label="Projekt" value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Alle Projekte</option>{data.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><div className="media-view-toggle"><button className="icon-quiet" aria-label="Grid" aria-pressed={!list} onClick={() => setList(false)}><Grid2X2 size={20}/></button><button className="icon-quiet" aria-label="Liste" aria-pressed={list} onClick={() => setList(true)}><List size={20}/></button></div></div>
     <details className="integration-advanced"><summary>Zuordnung & Datum filtern</summary><div className="media-filters"><select aria-label="Verknüpfte Einträge" value={linkedType} onChange={(event) => setLinkedType(event.target.value)}><option value="">Alle Zuordnungen</option><option value="project">Projekte / Content</option><option value="task">Aufgaben</option><option value="unlinked">Ohne Zuordnung</option></select><label className="media-date-filter">Ab Datum<input type="date" value={since} onChange={(event) => setSince(event.target.value)}/></label></div></details>
-    <div className={`media-grid media-library-grid ${list ? "media-list" : ""}`}>{filtered.slice(0,100).map((media) => <MediaCard key={media.id} media={media} linkedLabels={labels(media)}/>)}</div>{!filtered.length && <p className="media-empty">Keine passenden Medien vorhanden.</p>}{filtered.length > 100 && <p>Suche eingrenzen: angezeigt werden die ersten 100 Dateien.</p>}
+    <div className={`media-grid media-library-grid ${list ? "media-list" : ""}`}>{filtered.slice(0,100).map((media) => <MediaCard key={media.id} data={data} onState={onState} media={media} linkedLabels={labels(media)}/>)}</div>{!filtered.length && <p className="media-empty">Keine passenden Medien vorhanden.</p>}{filtered.length > 100 && <p>Suche eingrenzen: angezeigt werden die ersten 100 Dateien.</p>}
   </section>;
 }

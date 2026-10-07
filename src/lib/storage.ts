@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { lstat, mkdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, realpath, rename, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Readable, Transform } from "node:stream";
@@ -8,6 +8,7 @@ import type { CreatorState, MediaRecord, NasConfig } from "@/lib/model";
 import { dataDirectory } from "@/lib/store";
 import { readSecret } from "@/lib/secrets";
 import { safeRelativePath } from "@/lib/storage-paths";
+import { SmbStorageProvider } from "@/lib/smb-storage";
 
 export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 export class StorageError extends Error {
@@ -80,7 +81,17 @@ export class LocalStorageProvider implements StorageProvider {
     }
     return { body: Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream<Uint8Array>, length: end - start + 1, status, ...(status === 206 ? { contentRange: "bytes " + start + "-" + end + "/" + info.size } : {}) };
   }
-  async deleteFile(relativePath: string) { await rm(await this.location(relativePath), { force: true }); }
+  async deleteFile(relativePath: string) {
+    await rm(await this.location(relativePath), { force: true });
+    if (/^Media\/(Projects|Tasks)\//.test(relativePath)) {
+      const parts = relativePath.split("/").slice(0,-1);
+      while (parts.length > 2) {
+        const folder = await this.location(parts.join("/"));
+        try { await rmdir(folder); } catch { break; } // empty folders only; never recursive
+        parts.pop();
+      }
+    }
+  }
   async moveFile(from: string, to: string) {
     const destination = await this.location(to, true);
     try { await lstat(destination); throw new StorageError("Zielname existiert bereits.", 409); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -91,11 +102,16 @@ export class LocalStorageProvider implements StorageProvider {
 export function validateNas(input: Partial<NasConfig>): NasConfig {
   if (!input.host || !/^[a-zA-Z0-9.:[\]-]+$/.test(input.host) || input.host.length > 253 || /^(localhost|127\.|169\.254\.|0\.|::1$|\[::1\])/i.test(input.host)) throw new StorageError("Bitte einen gültigen NAS-Host oder eine LAN-IP eingeben.", 400);
   if (!Number.isInteger(input.port) || input.port! < 1 || input.port! > 65535) throw new StorageError("NAS-Port ist ungültig.", 400);
-  if (!["webdav-https", "webdav-http"].includes(input.protocol || "")) throw new StorageError("Nur WebDAV über HTTP oder HTTPS wird unterstützt.", 400);
+  if (!["smb", "webdav-https", "webdav-http"].includes(input.protocol || "")) throw new StorageError("NAS-Verbindungstyp ist ungültig.", 400);
+  if (input.protocol === "smb") {
+    if (!/^[a-zA-Z0-9.-]+$/.test(input.host)) throw new StorageError("Für SMB bitte einen DNS-Namen oder eine IPv4-Adresse eingeben.", 400);
+    if (!input.share || input.share.length > 100 || /[\\/<>:"|?*\x00-\x1f]/.test(input.share) || [".",".."].includes(input.share) || /[. ]$/.test(input.share)) throw new StorageError("Bitte einen gültigen SMB-Freigabenamen eingeben, z. B. Medien.", 400);
+    if (input.domain && (input.domain.length > 100 || /[\\/\x00-\x1f]/.test(input.domain))) throw new StorageError("SMB-Domäne ist ungültig.", 400);
+  }
   if (!input.username || input.username.length > 200 || /[:\r\n]/.test(input.username)) throw new StorageError("NAS-Benutzername fehlt oder ist ungültig.", 400);
   const folder = input.baseFolder?.replace(/^\/+|\/+$/g, "") || "";
   if (folder) safeRelativePath(folder);
-  return { ...input, baseFolder: "/" + folder } as NasConfig;
+  return { ...input, baseFolder: (input.protocol === "smb" ? "" : "/") + folder } as NasConfig;
 }
 
 export class WebDavStorageProvider implements StorageProvider {
@@ -164,7 +180,7 @@ export async function configuredNas(state: CreatorState) {
   if (!config.enabled) return null;
   const secret = await readSecret(config.secretId);
   if (!secret?.password) throw new StorageError("NAS-Konfiguration ist unvollständig. Bitte die Verbindung neu einrichten.", 409);
-  return new WebDavStorageProvider(validateNas(config), secret.password);
+  return config.protocol === "smb" ? new SmbStorageProvider(validateNas(config), secret.password) : new WebDavStorageProvider(validateNas(config), secret.password);
 }
 export async function storageProvider(state: CreatorState, media?: MediaRecord): Promise<StorageProvider> {
   if (media?.storageProvider === "local") return new LocalStorageProvider();

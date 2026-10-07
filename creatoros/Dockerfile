@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY app/package.json app/package-lock.json ./
 RUN npm ci
@@ -6,11 +6,15 @@ COPY app/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:22-bookworm-slim AS runtime
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUILD_ARCH}"
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY app/scripts/requirements-smb.txt /tmp/requirements-smb.txt
+RUN python3 -m venv /opt/creatoros-smb && /opt/creatoros-smb/bin/pip install --no-cache-dir -r /tmp/requirements-smb.txt && npm install -g @openai/codex@0.160.1
+ENV CREATOROS_SMB_PYTHON=/opt/creatoros-smb/bin/python CREATOROS_CODEX_EXECUTABLE=codex
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 CREATOROS_DATA_DIR=/data HA_INGRESS_PORT=8099 NEXT_INTERNAL_ORIGIN=http://127.0.0.1:3000
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static

@@ -53,6 +53,7 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     for (const privateFolder of ["data", ".test-data", ".git", "tests", "creatoros"]) await assert.rejects(() => access(path.join(repo, ".next", "standalone", privateFolder)), { code: "ENOENT" }, "Standalone excludes " + privateFolder);
     const oldState = initialState();
     delete oldState.brain;
+    for (const project of oldState.projects) delete project.nextTaskId;
     for (const field of ["tasks","planning","media","integrations","actionProposals"]) delete oldState[field];
     await writeFile(path.join(dataDir, "creatoros.json"), JSON.stringify(oldState));
     running = await launch(dataDir);
@@ -67,7 +68,8 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
 
     const migrated = await request("/api/state");
     assert.equal(migrated.brain.entries.length, 0);
-    assert.equal(migrated.tasks.length, 0); assert.equal(migrated.media.length, 0);
+    assert.equal(migrated.tasks.length, 1); assert.equal(migrated.media.length, 0);
+    assert.equal(migrated.projects[0].nextTaskId,migrated.tasks[0].id);
     assert.equal(migrated.integrations.ai.enabled, false);
     if (process.env.CREATOROS_BRAIN_SAMPLE) {
       const sample = JSON.parse((await readFile(process.env.CREATOROS_BRAIN_SAMPLE, "utf8")).replace(/^\uFEFF/, ""));
@@ -89,7 +91,8 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     const imported = await request("/api/brain", { action: "import", document, selectedIds: ["/profile", "/tools"], expectedRevision: preview.revision, source: "test-v1.json" });
     assert.equal(imported.state.brain.revision, 1);
     assert.equal(imported.state.brain.entries.length, 2);
-    assert.deepEqual(imported.state.projects, oldState.projects);
+    assert.deepEqual(imported.state.projects.map(({ nextTaskId, ...project }) => project), oldState.projects);
+    assert.equal(imported.state.projects[0].nextTaskId, imported.state.tasks[0].id);
     await request("/api/brain", { action: "import", document, selectedIds: ["/ai_instructions"], expectedRevision: 0 }, 409);
     assert.equal((await request("/api/state")).brain.entries.length, 2);
 
@@ -120,8 +123,8 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     const createdTask = await action("createTask", { projectId, title: "Thumbnail vorbereiten" });
     const taskId = createdTask.result.value.id;
     const updatedTask = await action("updateTask", { id: taskId, description: "Referenz prüfen", dueAt: "2026-10-10T15:00:00Z", status: "doing" });
-    assert.equal(updatedTask.state.tasks[0].status, "doing");
-    assert.equal((await action("completeTask", { id: taskId })).state.tasks[0].status, "done");
+    assert.equal(updatedTask.state.tasks.find((task) => task.id === taskId).status, "doing");
+    assert.equal((await action("completeTask", { id: taskId })).state.tasks.find((task) => task.id === taskId).status, "done");
     await request("/api/actions", { actor: "ai", action: { name: "createTask", args: { projectId, title: "Bypass" } } }, 403);
     await action("updateContent", { id: projectId, caption: "CreatorOS Launch", hooks: ["So beginnt es"], scripts: [{ id: "intro", title: "Intro", body: "Erster Satz", done: false }] });
     assert.equal((await action("scheduleContent", { id: projectId, platform: "YouTube", publishAt: "2026-10-11T12:00:00Z" })).state.projects[0].platform, "YouTube");
@@ -172,7 +175,7 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     assert.match(enrichedContext.prompt, /Referenz v2.txt/); assert.match(enrichedContext.prompt, /Export prüfen/);
     const backup = await request("/api/backup");
     assert.equal(backup.state.brain.entries.length, 3);
-    assert.equal(backup.state.media.length, 1); assert.equal(backup.state.tasks.length, 1);
+    assert.equal(backup.state.media.length, 1); assert.equal(backup.state.tasks.length, 3);
     assert.ok(!JSON.stringify(backup).includes("fixture-api-secret"));
     await request("/api/backup", { format: "creatoros-backup", version: 1, state: oldState });
     assert.equal((await request("/api/state")).brain.entries.length, 0);
@@ -188,7 +191,7 @@ test("production APIs: Brain, manual flows, integrations, media, backup and rest
     const persisted = await request("/api/state");
     assert.equal(persisted.brain.entries.length, 3);
     assert.ok(persisted.projects.some((item) => item.title === "Pipeline-Test"));
-    assert.equal(persisted.tasks[0].status, "done"); assert.equal(persisted.media[0].id, media.id);
+    assert.equal(persisted.tasks.find((task) => task.id === taskId).status, "done"); assert.equal(persisted.media[0].id, media.id);
     assert.equal(persisted.planning[0].title, "Schnitt und Export"); assert.equal(persisted.buildDay, "Freitag");
     assert.equal((await request("/api/integrations")).ai.credentialStored, true);
     assert.equal(await (await fetch(running.url + "/api/media/" + media.id + "/file")).text(), "abcdef");

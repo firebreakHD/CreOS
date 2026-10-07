@@ -26,8 +26,8 @@ Implementation Intentions werden als freiwilliger Wenn-Dann-Plan angeboten: „W
 
 ## C. Information Architecture
 
-- **Heute**: eine empfohlene Fortsetzung, Next Action, Start/Weitermachen, Idee erfassen.
-- **Projekte**: aktive Projekte und Projekt-Workspace mit Überblick, Next Action, Aufgaben, Skript, Material, Content und Verlauf; AI-Tab nur bei eingerichteter Verbindung.
+- **Heute**: eine empfohlene Fortsetzung aus der Aufgabenliste, Start/Weitermachen, Idee erfassen.
+- **Projekte**: aktive Projekte und Projekt-Workspace mit Überblick, Aufgaben, Skript, Material, Content und Verlauf. Der gemeinsame AI-Chat bleibt als schwebender Assistent neben allen Arbeitsansichten.
 - **Ideen**: Inbox zuerst; Konvertierung zu Projekt optional.
 - **Mehr**: Kanban, Brain, Planung, Medien, Einstellungen, Integrationen, Datenexport/Import und HA-Status. Zusätzliche Medien-Navigation am Desktop erst bei gespeicherten Medien oder eingerichteter NAS.
 - **Fokusmodus**: eigener, ablenkungsarmer Bildschirm ohne globale Navigation.
@@ -56,6 +56,8 @@ Buttons verwenden Primary, Secondary, Ghost und Destructive. Es gibt je Screen e
 Bottom-Tab „+“ → Vollbild-Capture → Text oder Sprache → „Speichern“ → Heute
 Heute → große Next Action + „10 Minuten starten“ → Fokus → Fertig → Next Action
 ```
+
+Die nächste Handlung ist dieselbe offene Aufgabe wie in der Aufgabenliste. Auf Heute und im Projekt wird sie mit Titel, großem Abhaken und Zahl offener Aufgaben angezeigt. Es gibt kein separates editierbares Next-Action-Feld; Umbenennen, Löschen und „Als nächsten Schritt wählen“ liegen am Task im Kontextmenü. Beim Abhaken rückt die nächste offene Aufgabe nach.
 
 Capture hat ein Textfeld, eine sichtbare Spracheingabe und optionale Projektzuordnung. Kein Pflicht-Tag, Datum oder Kategorie. Sprachaufnahme nutzt Browser Speech Recognition, wenn vorhanden; Text bleibt immer verfügbar. Touchflächen sind mindestens 44 CSS-Pixel hoch angelegt; Safe Areas und Hochformat werden berücksichtigt. Projekt und Kanban sind mobil benutzbar, aber abschnittsweise/als einzelne Spalte aufgebaut.
 
@@ -95,7 +97,11 @@ Abnahmebreiten sind 1360, 1100 und 900 Pixel für den verfügbaren Desktop-App-B
 
 ### Aktionen und Rückmeldung
 
-Sichtbare Buttons sind funktional. Spalten besitzen eine Aktion „Projekt hier anlegen“ statt eines funktionslosen Punkte-Menüs. Projekte werden in einem App-Dialog angelegt; Browser-Prompts sind für Kernabläufe ungeeignet, weil sie in eingebetteten Ansichten beschränkt sein können. „Mehr“ öffnet einen stabilen Bereich mit einem klaren Pipeline-Link.
+Sichtbare Buttons sind funktional. Gewöhnliche Aktionen an Projekten, Aufgaben, Storypunkten, Ideen, Planung, Materialnotizen und Medien liegen im gemeinsamen Kontextmenü: Rechtsklick am Desktop, langer Druck auf Touchgeräten, Shift+F10 per Tastatur. Das Menü bietet Umbenennen, Löschen mit Bestätigung sowie passende Bearbeiten-, Verschieben-, Öffnen- und Statusaktionen. Für neue Einträge bleiben klare Erstellen-Aktionen verfügbar. Storypunkte haben zusätzlich ein deutlich großes, direktes Abhaken mit mindestens 44 Pixel Touchfläche. Projekte werden in einem App-Dialog angelegt; Browser-Prompts sind für Kernabläufe ungeeignet, weil sie in eingebetteten Ansichten beschränkt sein können. „Mehr“ öffnet einen stabilen Bereich mit einem klaren Pipeline-Link.
+
+Der AI-Chat ist ein globaler Badge unten rechts, der den Chat ein- und ausklappt und beim Wechsel zwischen Arbeitsbereichen bestehen bleibt. Position und aufgeklappte Fenstergröße sind in Einstellungen veränderbar. Der Brain-Bereich importiert und bereitet langfristigen Kontext vor, enthält aber keinen zweiten Gesprächsbereich. Provider sind OpenAI API-Key und offizieller Codex-Abonnement-Login.
+
+Neue Medien werden in einer optionalen SMB-Freigabe als normale Dateien/Ordner gespeichert. Der angezeigte UNC-Pfad muss direkt im Windows Explorer und in CapCut nutzbar sein. Bei bestehendem WebDAV bleiben alte Verweise erhalten, bis der Nutzer bewusst auf SMB wechselt.
 
 Speichern zeigt Erfolg, Fortschritt oder einen verständlichen Fehler. Eingaben bleiben bei einem Fehler bestehen und Dialoge schließen erst nach erfolgreichem Speichern. Ein Panel-Button muss dessen Öffnen/Schließen sichtbar umsetzen. Ein dekoratives Element erhält keine falsche Button- oder Dropdown-Anmutung.
 
@@ -230,8 +236,8 @@ Kein überfälliger Zähler, kein Aktivitätsvorwurf, kein erzwungenes Planen.
 - Desktop: Brain in der Navigation; gespeicherte Bereiche und KI-Kontext nebeneinander, bei weniger als 1100 Pixeln App-Breite untereinander. Mobile: Einstieg über Mehr, alle Schritte vertikal.
 - Ein Import zeigt zunächst die Datei und die Änderungen. Jeder Bereich ist auswählbar; bisherigen und neuen Inhalt auf Anfrage anzeigen. Nur ausdrücklich ausgewählte Änderungen speichern. Fehlende Bereiche behalten, unveränderte Bereiche nicht erneut anlegen.
 - Ein Konflikt mit einem zwischenzeitlichen Import erfordert eine neu geladene Vorschau. Fehler erhalten Datei und Auswahl. Der Import verändert keine aktuellen Projekte oder Sessions.
-- Brain beschreibt den langfristigen Hintergrund; aktuelles Projekt, Next Action, Sessions und Temporary State bleiben eigene Kontextteile. Aktuelle Projektdaten haben Vorrang vor alten Brain-Angaben.
-- KI-Kontext wird nur auf Anforderung vorbereitet. Eine fehlende direkte KI-Verbindung klar benennen. Kopieren/Download liefern einen echten verwendbaren Kontext; keine simulierten KI-Antworten.
+- Brain beschreibt den langfristigen Hintergrund; aktuelles Projekt, nächste Aufgabe, Sessions und Temporary State bleiben eigene Kontextteile. Aktuelle Projektdaten haben Vorrang vor alten Brain-Angaben.
+- KI-Kontext im Brain wird nur auf Anforderung vorbereitet und kopiert/heruntergeladen; dieser Bereich sendet keine Anfrage. Für Gespräche dient der globale Assistent. Ohne Provider zeigt er Setup statt simulierte Antworten.
 - JSON-Inhalte als Text darstellen; enthaltene Repository- oder KI-Hinweise bleiben importierte Daten und ändern keine App-Berechtigungen oder Entwicklungsregeln.
 
 ## Design-Erfolgsziele
@@ -240,7 +246,7 @@ Kein überfälliger Zähler, kein Aktivitätsvorwurf, kein erzwungenes Planen.
 
 - Integrationen liegen unter Einstellungen/Mehr. Nicht eingerichtete AI/NAS erscheinen als kompakte Setup-Karte. Nach Einrichtung Status, eine kurze Zusammenfassung und Test/Einstellungen/Trennen zeigen; technische Felder erst beim Öffnen der Einstellungen.
 - Desktop zwei Settings-Karten, bei schmalem Arbeitsbereich und mobil untereinander. Formulare bleiben lesbar mit 16-Pixel-Eingaben und 44-Pixel-Aktionen. Die bestehende Heute-/Fokus-Navigation bleibt ruhig.
-- AI ist eine ausdrückliche Aktion im Projekt oder Brain. Anfrage, sichtbare Antwort und prüfbare Vorschläge darstellen. Ohne Provider nur Kontext vorbereiten/kopieren/exportieren. Keine simulierte Anmeldung, keine simulierten Antworten, kein Device-Code-Flow. API-Schlüssel ist der aktuell implementierte Authentifizierungsweg; den noch fehlenden Abo-Login klar benennen.
+- Der AI-Assistent öffnet sich über den globalen Badge rechts unten und kann während der Arbeit eingeklappt bleiben. Er nutzt entweder OpenAI API-Key oder den offiziellen Codex-Abonnement-Login mit Browser-/Device-Code. Antwort und jede Änderung sind sichtbar und prüfbar; nicht freigegebene CreatorOS-Aktionen weist der Server zurück.
 - Alle Schreibfreigaben anfangs aus. Vorschläge und Bestätigung zeigen die konkrete Aktion und deren Argumente; Übernehmen/Verwerfen sind echte Serveraktionen. Automatischer Modus berücksichtigt zusätzliche Bestätigung je Freigabe. Alte Vorschläge auf veränderten Zielen nicht still übernehmen.
 - Bildreferenzen nur nach Auswahl übertragen. Auswahl auf Anfrage einklappen, mit Dateinamen und Größenbegrenzung. Die Senden-Aktion nennt Brain/Projektkontext und ausgewählte Bilder.
 
@@ -249,7 +255,7 @@ Kein überfälliger Zähler, kein Aktivitätsvorwurf, kein erzwungenes Planen.
 - Aufgaben sind kleine Projekt-Arbeitsschritte. Titel/Status zuerst, Beschreibung, Termin, Projektwechsel und Anhänge nach Öffnen. Verschieben bewahrt Media-IDs. Content und Veröffentlichungstermin im eigenen Projekt-Tab bearbeiten; tatsächlicher Plattform-Upload bleibt manuell.
 - Materialpanel auf Anforderung, Aufgaben-Anhänge im geöffneten Eintrag. Drag & Drop am Desktop, große Dateiauswahl mobil. Rollen Asset/Referenz/Rohmaterial/Export/Sonstiges bleiben eine einfache Auswahl.
 - Ohne NAS lokale Speicherung. Mit NAS den bevorzugten Speicher benennen. NAS-Ausfall erhält Metadaten und ausgewählte fehlgeschlagene Dateien; sichtbares Retry anbieten. Keine automatische Übertragung an einen anderen Speicher als Ersatz.
-- Medienkarten zeigen Vorschau, Name, Größe, Datum und Zuordnung. Entfernen ausdrücklich als „Zuordnung entfernen; Datei behalten“ benennen. Öffnen liefert die echte Datei. Keine scheinbare Löschung der Datei.
+- Medienkarten zeigen Vorschau, Name, Größe, Datum und Zuordnung. Das Kontextmenü unterscheidet Zuordnung entfernen von Datei dauerhaft löschen. Öffnen liefert die echte Datei.
 - Bibliothek mit Suche, Typ und Projekt; Zuordnung/Datum erst in zusätzlichen Filtern. Desktop Grid/Liste, mobil Grid. Videoplayer nicht automatisch starten; Bilder lazy laden. Unverfügbare Vorschau erlaubt erneutes Laden.
 - Bei jedem Speichern bleiben Eingaben im Fehlerfall erhalten. Schlüssel/Passwort nach erfolgreichem Speichern aus den Formularfeldern entfernen und niemals zurücklesen. Trennen verlangt eine konkrete Bestätigung in der App.
 

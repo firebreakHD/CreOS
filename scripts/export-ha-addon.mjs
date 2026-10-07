@@ -75,7 +75,7 @@ export async function exportHaAddon(repoRoot = scriptRepo) {
   const template = path.join(repo, "creatoros");
   await assertPlainDirectory(template);
 
-  for (const file of [...appFiles, "repository.yaml", "scripts/copy-standalone-assets.mjs", ".next/BUILD_ID", ".next/standalone/server.js"]) {
+  for (const file of [...appFiles, "repository.yaml", "scripts/copy-standalone-assets.mjs", "scripts/smb-storage.py", "scripts/requirements-smb.txt", ".next/BUILD_ID", ".next/standalone/server.js"]) {
     if (!await exists(path.join(repo, file))) throw new Error("Pflichtdatei fehlt; zuerst einen erfolgreichen Produktionsbuild ausführen: " + file);
   }
   for (const file of addonFiles) {
@@ -106,6 +106,7 @@ export async function exportHaAddon(repoRoot = scriptRepo) {
     await writeFile(path.join(appStaging, "package.json"), JSON.stringify(appPackage, null, 2) + "\n");
     await writeFile(path.join(appStaging, "package-lock.json"), JSON.stringify(appLock, null, 2) + "\n");
     await cp(path.join(repo, "scripts", "copy-standalone-assets.mjs"), path.join(appStaging, "scripts", "copy-standalone-assets.mjs"));
+    for (const file of ["smb-storage.py","requirements-smb.txt"]) await cp(path.join(repo, "scripts", file), path.join(appStaging, "scripts", file));
     for (const folder of ["src", "public"]) await copySource(path.join(repo, folder), path.join(appStaging, folder));
 
     await replaceGeneratedDirectory(appStaging, path.join(template, "app"), template);

@@ -20,7 +20,7 @@ async function fixture(context) {
   const packageData = { name: "creatoros", version: "0.1.0", scripts: { build: "next build", postbuild: "node scripts/export-ha-addon.mjs" }, dependencies: {} };
   await put("package.json", JSON.stringify(packageData));
   await put("package-lock.json", JSON.stringify({ name: "creatoros", version: "0.1.0", lockfileVersion: 3, packages: { "": { name: "creatoros", version: "0.1.0" } } }));
-  for (const file of ["next.config.ts", "next-env.d.ts", "tsconfig.json", "scripts/copy-standalone-assets.mjs", ".next/BUILD_ID", ".next/standalone/server.js"]) await put(file, "fixture");
+  for (const file of ["next.config.ts", "next-env.d.ts", "tsconfig.json", "scripts/copy-standalone-assets.mjs", "scripts/smb-storage.py", "scripts/requirements-smb.txt", ".next/BUILD_ID", ".next/standalone/server.js"]) await put(file, "fixture");
   for (const file of ["Dockerfile", "build.yaml", "ha-ingress-proxy.cjs", ".dockerignore"]) await put("creatoros/" + file, "fixture\n");
   await put("creatoros/config.yaml", "name: CreatorOS\nversion: 0.1.0\n");
   await put("creatoros/entrypoint.sh", "#!/bin/sh\r\nexec node server.js\r\n");

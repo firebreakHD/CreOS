@@ -14,7 +14,7 @@ import { selectedImageInputs } from "@/lib/ai-media";
 import { uploadMedia } from "@/lib/media";
 
 test("one action layer handles tasks, content, schedules, ideas and media links", () => {
-  const state = initialState(); const projectId = state.activeProjectId;
+  const state = initialState(); state.tasks = []; const projectId = state.activeProjectId;
   const task = applyAction(state, { name: "createTask", args: { projectId, title: "Marker setzen" } });
   applyAction(state, { name: "updateTask", args: { id: task.id, status: "doing", dueAt: "2026-10-08T17:00:00Z" } });
   applyAction(state, { name: "completeTask", args: { id: task.id } });
@@ -55,6 +55,7 @@ test("AI proposals, automatic mode, confirmation, conflicts, encrypted credentia
   const originalFetch = globalThis.fetch;
   try {
     const state = await readState(); const projectId = state.activeProjectId;
+    await updateState((current) => { current.tasks = []; for (const project of current.projects) { project.nextTaskId = ""; project.nextAction = ""; } });
     const secretId = await saveSecret({ apiKey: "test-credential-only" });
     assert.equal((await readSecret(secretId)).apiKey, "test-credential-only");
     assert.ok(!(await readFile(path.join(directory, "integrations.vault.json"), "utf8")).includes("test-credential-only"));

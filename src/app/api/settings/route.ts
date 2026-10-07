@@ -1,6 +1,6 @@
 import { rejectUntrustedRequest } from "@/lib/request-guard";
 import { NextResponse } from "next/server";
-import { updateState } from "@/lib/store";
+import { updateState, validateAssistantLayout } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,6 +9,12 @@ export async function PATCH(request: Request) {
   const untrusted = rejectUntrustedRequest(request); if (untrusted) return untrusted;
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Ungültige JSON-Daten." }, { status: 400 }); }
+  if (body && typeof body === "object" && "assistantLayout" in body) {
+    const layout = validateAssistantLayout(body.assistantLayout);
+    if (JSON.stringify(layout) !== JSON.stringify(body.assistantLayout)) return NextResponse.json({ error: "Chat-Größe oder Position ist ungültig." }, { status: 400 });
+    const { state } = await updateState((current) => { current.assistantLayout = layout; });
+    return NextResponse.json({ state });
+  }
   const buildDay = (body as { buildDay?: unknown })?.buildDay;
   if (typeof buildDay !== "string" || !["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"].includes(buildDay)) return NextResponse.json({ error: "Unbekannter Build-Tag." }, { status: 400 });
   const { state } = await updateState((current) => { current.buildDay = buildDay; });

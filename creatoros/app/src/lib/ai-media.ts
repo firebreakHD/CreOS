@@ -5,7 +5,7 @@ import { storageProvider } from "@/lib/storage";
 export const isAiImage = (mime: string) => ["image/png","image/jpeg","image/webp","image/gif"].includes(mime);
 export async function selectedImageInputs(state: CreatorState, ids: string[], projectId: string | null) {
   if (!Array.isArray(ids) || ids.length > 3 || ids.some((id) => typeof id !== "string" || id.length > 100) || new Set(ids).size !== ids.length) throw new ActionError("Bitte höchstens drei unterschiedliche Referenzbilder auswählen.");
-  const inputs: unknown[] = []; let total = 0;
+  const inputs: ({ type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail: string })[] = []; let total = 0;
   for (const id of ids) {
     const media = state.media.find((item) => item.id === id);
     if (!media || !isAiImage(media.mimeType)) throw new ActionError("Referenzbild wurde nicht gefunden oder der Bildtyp wird nicht unterstützt.");

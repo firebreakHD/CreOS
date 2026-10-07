@@ -92,10 +92,10 @@ In HA unter **Einstellungen → Apps → Repositories** `https://github.com/fire
 1. **Brain-Datei importieren**: strukturierte JSON-Datei auswählen (maximal 512 KB). Verschachtelte Bereiche und Listen bleiben erhalten.
 2. In der Vorschau neue, geänderte und unveränderte Bereiche prüfen. Nur ausgewählte Bereiche werden übernommen. Fehlende Bereiche werden nicht gelöscht; geänderte Bereiche ersetzen den jeweiligen ausgewählten Bereich vollständig.
 3. **Brain exportieren** erzeugt eine portable Datei im Format `creatoros-brain`, Version 1. Erneuter Import desselben Inhalts erzeugt keine Duplikate.
-4. Im Bereich **Kontext für die KI** Projekt und Anfrage wählen. **KI-Kontext vorbereiten** verbindet Brain, aktuellen Projektstand, Aufgaben, Medienreferenzen, Planung, Next Action, die letzten fünf abgeschlossenen Sessions und den vorübergehenden Zustand. Aktuelle Projektdaten haben Vorrang vor älteren Brain-Angaben.
-5. Kontext kopieren oder als Text herunterladen und in einen KI-Chat einfügen. Das Vorbereiten sendet keine Daten an einen Anbieter. Bei eingerichteter AI-Verbindung erscheint zusätzlich **Mit AI bearbeiten**; erst **An AI senden** überträgt die Anfrage mit Kontext und ausdrücklich ausgewählten Bildreferenzen.
+4. Im Brain-Bereich Projekt und Frage wählen. **Kontext vorbereiten** verbindet Brain, aktuellen Projektstand, Aufgaben, Medienreferenzen, Planung, nächste Aufgabe, die letzten fünf abgeschlossenen Sessions und den vorübergehenden Zustand.
+5. Kontext kopieren oder als Text herunterladen. Das Vorbereiten sendet keine Daten an einen Anbieter. Gespräche und ausdrücklich ausgewählte Bildreferenzen laufen über den schwebenden Assistenten rechts unten.
 
-Brain liegt mit den App-Daten im persistenten Datenordner und ist in der normalen App-Sicherung enthalten. Ältere Sicherungen ohne Brain erhalten beim Einlesen einen leeren Brain-Bereich. Ein Brain-Import verändert keine Projekte, Sessions oder Next Actions.
+Brain liegt mit den App-Daten im persistenten Datenordner und ist in der normalen App-Sicherung enthalten. Ältere Sicherungen ohne Brain erhalten beim Einlesen einen leeren Brain-Bereich. Ein Brain-Import verändert keine Projekte, Sessions oder Aufgaben.
 
 Der bereitgestellte Export mit `export_type: "creatoros_brain"` und `schema_version: "1.0"` wird direkt unterstützt. Profil-Unterbereiche und einzelne Projektgeschichten werden getrennte Einträge; Formatangaben werden nicht als Inhalt übernommen. Die bereitgestellte Datei ergibt neun Bereiche. Weitere strukturierte JSON-Exporte und CreatorOS-eigene Exporte werden ebenfalls akzeptiert. Bei generischem JSON bildet jeder oberste Inhaltsbereich einen Eintrag; bei einem reinen `brain`-/`data`-/`content`-Wrapper dessen Inhaltsbereiche. Stabile Bereichsschlüssel bzw. exportierte IDs ermöglichen spätere Updates.
 
@@ -107,12 +107,12 @@ Einstieg: **Einstellungen / Mehr → Integrationen**. Nicht eingerichtete Integr
 
 ### AI & Codex
 
-1. OpenAI-API-Schlüssel und Modell-ID eingeben, Freigaben und Modus wählen, speichern.
-2. **Verbindung testen** prüft den Schlüssel und Modellzugriff über die Modelle-API. Der Test überträgt kein Brain und erzeugt keine Modellantwort.
-3. Im Projekt **AI** öffnen oder Brain verwenden; eine konkrete Anfrage senden. Bildreferenzen bei Bedarf ausdrücklich auswählen (PNG/JPEG/WebP/GIF, maximal drei, einzeln 6 MB, zusammen 10 MB).
+1. Als Anbieter OpenAI API-Key oder Codex-Abonnement wählen. Der Codex-Login nutzt den offiziellen Browser-/Device-Code-Flow; die Anmeldung wird isoliert gespeichert und nicht aus vorhandenen Codex-Dateien importiert.
+2. Freigaben und Modus wählen. Direkte Anfragen laufen im schwebenden CreatorOS-Assistenten rechts unten; Position und Fenstergröße lassen sich in Einstellungen anpassen. Brain dient dem Import und der Vorbereitung kopierbarer Kontextdaten.
+3. Bildreferenzen bei Bedarf ausdrücklich auswählen (PNG/JPEG/WebP/GIF, maximal drei, einzeln 6 MB, zusammen 10 MB).
 4. Vorschläge prüfen und übernehmen/verwerfen. Alle Berechtigungen sind anfangs ausgeschaltet. **Nur Vorschläge** und **Vor Änderungen bestätigen** verändern Einträge erst beim Übernehmen. **Automatisch** führt erlaubte Aktionen aus; zusätzliche Bestätigung lässt sich je Freigabe aktivieren. Vorschläge laufen nach einer Stunde ab. Berechtigungsentzug und zwischenzeitlich veränderte Ziele verhindern die Bestätigung.
 
-Die aktuelle Add-on-Architektur nutzt die OpenAI Responses API mit strukturiertem Function Calling (`store: false`). Ein ChatGPT-/Codex-Abonnement-Login ist hier noch nicht angebunden; es gibt keinen Device-Code-Flow. API-Nutzung wird separat abgerechnet. Ein normaler Abonnement-Login benötigt eine eigene registrierte Anbindung bzw. einen geeigneten Codex-Dienst; vorhandene Codex-Login-Dateien werden nicht übernommen. Siehe [offizielle OpenAI-Authentifizierung](https://learn.chatgpt.com/docs/auth), [Function Calling](https://developers.openai.com/api/docs/guides/function-calling) und [Bildreferenzen](https://developers.openai.com/api/docs/guides/images-vision).
+OpenAI nutzt die Responses API mit strukturiertem Function Calling (`store: false`); API-Nutzung wird separat abgerechnet. Codex läuft über den offiziellen `codex app-server` mit isoliertem Login und eng begrenzten CreatorOS-Aktionen. Es werden weder Shell-/Dateiwerkzeuge freigegeben noch vorhandene Codex-Login-Dateien importiert. Siehe [offizielle OpenAI-Authentifizierung](https://learn.chatgpt.com/docs/auth), [Function Calling](https://developers.openai.com/api/docs/guides/function-calling) und [Bildreferenzen](https://developers.openai.com/api/docs/guides/images-vision).
 
 | Gemeinsame Action | Funktion |
 |---|---|
@@ -127,12 +127,12 @@ UI und AI verwenden dieselbe serverseitige Action-Schicht. `/api/actions` nimmt 
 
 ### NAS / Medienspeicher
 
-1. WebDAV auf der NAS aktivieren und einen Benutzer mit Zugriff auf den gewünschten Basisordner anlegen.
-2. Host/IP, Port, Benutzer, Passwort und WebDAV-Basisordner in CreatorOS speichern. HTTPS ist Standard; das Zertifikat muss für den angegebenen Host gültig und vertrauenswürdig sein. Der voreingestellte Port 5006 ist anpassbar; HTTP ist optional und überträgt Zugangsdaten unverschlüsselt.
-3. **Verbindung testen** prüft den vorhandenen Basisordner per `PROPFIND`, ohne Dateien oder Unterordner anzulegen. Fehlende Ordner, Authentifizierungsprobleme und nicht erreichbare NAS werden erklärt. Der Test weist noch keine Schreibberechtigung nach; diese wird beim Upload geprüft.
+1. Auf der NAS eine SMB-Freigabe und einen Benutzer mit Lese-/Schreibzugriff anlegen.
+2. Host/IP, Freigabename, Benutzer, Passwort und optionalen Unterordner in CreatorOS speichern. Die Freigabe ist ein gewöhnlicher Explorer-Ordner; der UNC-Pfad wird in CreatorOS angezeigt und kann für CapCut kopiert werden.
+3. **Verbindung testen** prüft Zugriff und Schreibbarkeit im Basisordner. Beim Upload entstehen normale projektbezogene Unterordner innerhalb der Freigabe.
 4. Im Projekt **Material** oder in einer geöffneten Aufgabe unter **Anhänge & Referenzen** Dateien ablegen bzw. auswählen. Bei eingerichteter NAS werden Dateien dort gestreamt; ohne NAS im lokalen Datenordner `media/`. Bei NAS-Ausfall bleibt der Upload mit erneuter Versuchsmöglichkeit erhalten und speichert nicht unbemerkt lokal.
 
-Der Storage-Provider unterstützt `storeFile`, `getFile`, `deleteFile`, `moveFile`. WebDAV verwendet serverseitig Basic Authentication, `MKCOL` nur für benötigte Ordner, `PUT` für Dateien und `GET` mit Byte-Ranges für Vorschauen/Video. Credentials folgen keinen HTTP-Weiterleitungen. HTTPS-Zertifikatsprüfung bleibt aktiviert. Absolute Pfade und Traversal werden abgelehnt. Dateiübertragung: maximal 500 MB, erlaubte Bild-/Video-/Audio-/PDF-/Text-/Office-/ZIP-Typen, keine ausführbaren Dateien oder HTML/SVG. Office/ZIP werden nicht ausgeführt oder entpackt.
+Der Storage-Provider unterstützt `storeFile`, `getFile`, `deleteFile`, `moveFile`. SMB arbeitet im Add-on über den beschränkten Python-Helfer und die SMB-Bibliothek; Zugangsdaten gehen nicht an den Browser und erscheinen nicht in Explorer-Pfaden. Absolute Pfade und Traversal werden abgelehnt. Dateiübertragung: maximal 500 MB, erlaubte Bild-/Video-/Audio-/PDF-/Text-/Office-/ZIP-Typen, keine ausführbaren Dateien oder HTML/SVG. Office/ZIP werden nicht ausgeführt oder entpackt. Alte WebDAV-Datensätze bleiben für bestehende Speicherreferenzen unterstützt.
 
 Beispielstruktur unter dem konfigurierten Root:
 
@@ -157,9 +157,9 @@ Das JSON-Backup enthält Brain, Projekte, Aufgaben, Planung, Media-Metadaten und
 
 ### Prüfung und aktuelle Grenzen
 
-`npm test` prüft Export, Brain-Merge, Actions/Freigaben, verschlüsselte Credentials, Bildauswahl sowie lokalen und simulierten WebDAV-Speicher. Nach dem Produktionsbuild prüft `npm run test:api` mit isolierten Daten Brain-Import/Export/Konflikte, manuelle Projekte/Ideen/Sessions, Aufgaben/Content/Planung, Datei-Upload/Byte-Ranges/Zuordnung, Integrationszustände, Origin-Schutz, Backup/Restore und Neustart-Persistenz. Keine echten Provider-Anfragen in automatisierten Tests.
+`npm test` prüft Export, Brain-Merge, Actions/Freigaben, verschlüsselte Credentials, Codex-Login-Grenzen, Next-Task-Migration und lokalen/simulierten SMB- sowie WebDAV-Speicher. Nach dem Produktionsbuild prüft `npm run test:api` mit isolierten Daten Brain-Import/Export/Konflikte, manuelle Projekte/Ideen/Sessions, Aufgaben/Content/Planung, Datei-Upload/Byte-Ranges/Zuordnung, Integrationszustände, Origin-Schutz, Backup/Restore und Neustart-Persistenz. Keine echten Provider- oder NAS-Anfragen in automatisierten Tests.
 
-Noch nicht angebunden: ChatGPT-/Codex-Abo-Login, automatische Veröffentlichung zu sozialen Plattformen, KI-Bild-/Videoerzeugung, Video-/Audioanalyse, SMB/NFS/S3/Cloud-Provider, Offline-Upload-Queue, automatische NAS-Dateisuche und Verschieben/Umbenennen in der UI. Echte NAS-/OpenAI-/HA-Verbindung benötigt die persönlichen Endpunkte/Zugangsdaten; Container und visuelle HA-Ansicht müssen an der Instanz geprüft werden.
+Noch nicht angebunden: automatische Veröffentlichung zu sozialen Plattformen, KI-Bild-/Videoerzeugung, Video-/Audioanalyse, NFS/S3/Cloud-Provider, Offline-Upload-Queue und automatische NAS-Dateisuche. Echte Codex-/NAS-/HA-Verbindung benötigt persönliche Anmeldung/Zugangsdaten; Container und visuelle HA-Ansicht müssen an der Instanz geprüft werden.
 
 ## Build und Home-Assistant-Export
 

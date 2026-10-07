@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { Brain, Check, Copy, Download, FileUp, RefreshCw, Sparkles, X } from "lucide-react";
 import type { CreatorState } from "@/lib/model";
 import { MAX_BRAIN_BYTES, type BrainChange, type BrainValue } from "@/lib/brain";
-import AiPanel from "@/components/ai-panel";
 
 const display = (content: BrainValue) => typeof content === "string" ? content : JSON.stringify(content, null, 2);
 const statusLabel = { new: "Neu", updated: "Geändert", unchanged: "Unverändert" };
@@ -103,13 +102,12 @@ export default function BrainScreen({ data, onState, onNotify }: { data: Creator
       <article className="brain-stored"><div className="brain-card-heading"><Brain size={20}/><h2>Gespeicherter Kontext</h2></div>
         {data.brain.entries.length ? data.brain.entries.map((entry) => <details className="brain-entry" key={entry.id}><summary>{entry.title}</summary><pre>{display(entry.content)}</pre><small>Quelle: {entry.source} · {new Date(entry.updatedAt).toLocaleDateString("de-AT")}</small></details>) : <div className="brain-empty"><p>Noch kein Brain importiert.</p><p>Lade deine strukturierte JSON-Datei. Vor dem Speichern siehst du alle Änderungen.</p></div>}
       </article>
-      <article className="brain-ai"><div className="brain-card-heading"><Sparkles size={20}/><h2>Kontext für die KI</h2></div><p>Brain, aktuelles Projekt, nächste Handlung und letzte Sessions gemeinsam vorbereiten. {data.integrations.ai.enabled ? "Die direkte AI-Verbindung findest du unter diesem Bereich." : "Eine direkte KI-Verbindung kannst du unter Mehr → Integrationen einrichten."}</p>
+      <article className="brain-ai"><div className="brain-card-heading"><Sparkles size={20}/><h2>Kontext vorbereiten</h2></div><p>Brain, Projekt, nächste Aufgabe und letzte Sessions zu einem kopierbaren Kontext bündeln. Der Arbeitschat bleibt im CreatorOS-Assistenten rechts unten.</p>
         <label htmlFor="brain-project">Projekt</label><select id="brain-project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setPrompt(""); }}><option value="">Nur langfristiger Kontext</option>{data.projects.map((project) => <option value={project.id} key={project.id}>{project.title}</option>)}</select>
         <label htmlFor="brain-question">Wobei soll die KI helfen?</label><textarea id="brain-question" value={question} maxLength={4000} rows={4} onChange={(event) => { setQuestion(event.target.value); setPrompt(""); }}/>
         <button className="button-secondary" disabled={working} onClick={() => void prepareContext()}><Sparkles size={18}/> KI-Kontext vorbereiten</button>
         {prompt && <div className="brain-prepared"><label htmlFor="brain-prompt">Vorbereiteter Kontext</label><textarea ref={promptInput} id="brain-prompt" readOnly value={prompt} rows={10}/><div className="brain-preview-actions"><button className="button-primary" onClick={() => void copy()}><Copy size={17}/> Kopieren</button><button className="button-secondary" onClick={downloadContext}><Download size={17}/> Als Text herunterladen</button></div><small>Hier wird nichts an einen KI-Anbieter gesendet. Du kannst den Text in deinen KI-Chat einfügen.</small></div>}
       </article>
     </div>
-    {data.integrations.ai.enabled && <AiPanel data={data} projectId={projectId || null} onState={onState}/>}
   </section>;
 }

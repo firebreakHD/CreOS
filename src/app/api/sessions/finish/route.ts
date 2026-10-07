@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { emitHomeAssistantEvent } from "@/lib/home-assistant";
 import { now } from "@/lib/model";
 import { updateState } from "@/lib/store";
+import { setNextTaskText } from "@/lib/next-task";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     const project = current.projects.find((item) => item.id === session.projectId);
     if (project) {
       project.lastTouchedAt = endedAt;
-      if (nextAction) { project.nextAction = nextAction; project.lastProgress = "Session abgeschlossen"; }
+      if (nextAction) { setNextTaskText(current,project,nextAction); project.lastProgress = "Session abgeschlossen"; }
     }
     return { session, project };
   });

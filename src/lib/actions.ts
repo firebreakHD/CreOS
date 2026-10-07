@@ -2,6 +2,7 @@ import { ActionError, actionFingerprint, actionPermissions, applyAction, checkAi
 import { id, now, type StructuredAction } from "@/lib/model";
 import { updateState } from "@/lib/store";
 import { uploadMedia } from "@/lib/media";
+import { storageProvider } from "@/lib/storage";
 
 async function performTextUpload(args: unknown, actor: "user" | "ai", proposalId?: string) {
   const file = args as { entityType: string; entityId: string; filename: string; content: string; role: string };
@@ -13,6 +14,18 @@ async function performTextUpload(args: unknown, actor: "user" | "ai", proposalId
 }
 
 export async function executeAction(action: StructuredAction, actor: "user" | "ai" = "user") {
+  if (["deleteMedia", "deleteContent", "removeMaterial", "renameMedia", "deleteTask", "updateIdea", "deleteIdea", "deletePlanning"].includes(action?.name) && actor !== "user") throw new ActionError("Diese Aktion ist nur manuell möglich.", 403);
+  if (action?.name === "deleteMedia") {
+    if (!action.args || action.args.confirm !== true || typeof action.args.id !== "string") throw new ActionError("Dateilöschung bitte bestätigen.");
+    return updateState(async (current) => {
+      const media = current.media.find((item) => item.id === action.args.id);
+      if (!media) throw new ActionError("Medium nicht gefunden.", 404);
+      const provider = await storageProvider(current, media);
+      await provider.deleteFile(media.relativePath);
+      current.media = current.media.filter((item) => item.id !== media.id);
+      return { outcome: "applied", value: { id: media.id } };
+    });
+  }
   const execution = await updateState((current) => {
     if (actor === "ai") {
       checkAiPermission(current, action);

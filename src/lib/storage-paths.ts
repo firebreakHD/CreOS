@@ -1,4 +1,10 @@
-import type { MediaRecord, Project } from "./model.ts";
+import type { MediaRecord, Project, NasConfig } from "./model.ts";
+export function smbExplorerPath(config: NasConfig, relativePath = "") {
+  if (config.protocol !== "smb" || !config.host || !config.share) return "";
+  if (relativePath) safeRelativePath(relativePath);
+  const base = config.baseFolder.replace(/^\/+|\/+$/g, "");
+  return "\\\\" + config.host + "\\" + config.share + [base,relativePath].filter(Boolean).map((part) => "\\" + part.replaceAll("/", "\\")).join("");
+}
 export function safeRelativePath(value: string) {
   if (!value || value.length > 1400 || value.includes("\\") || value.includes("\0") || value.startsWith("/") || value.split("/").some((part) => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part))) throw new Error("Ungültiger Speicherpfad.");
   return value;

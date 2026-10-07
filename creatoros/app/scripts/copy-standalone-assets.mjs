@@ -9,3 +9,5 @@ const publicAssets = path.join(root, "public");
 await mkdir(path.join(standalone, ".next"), { recursive: true });
 await cp(staticAssets, path.join(standalone, ".next", "static"), { recursive: true, force: true });
 await cp(publicAssets, path.join(standalone, "public"), { recursive: true, force: true });
+await mkdir(path.join(standalone, "scripts"), { recursive: true });
+await cp(path.join(root, "scripts", "smb-storage.py"), path.join(standalone, "scripts", "smb-storage.py"));

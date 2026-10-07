@@ -7,7 +7,7 @@ export async function appRequest(url: string, body: unknown, timeout = 15000) {
   return result;
 }
 export async function manualAction(action: StructuredAction, onState: (state: CreatorState) => void) {
-  const result = await appRequest("/api/actions", { action });
+  const result = await appRequest("/api/actions", { action },60000);
   onState(result.state); return result.result;
 }
 export const localDateTime = (value: string | null | undefined) => value ? new Date(Date.parse(value) - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";

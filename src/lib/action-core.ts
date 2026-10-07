@@ -1,4 +1,5 @@
 import { id, now, type AiPermission, type CreatorState, type MediaRole, type Project, type StructuredAction, type Task } from "./model.ts";
+import { setNextTaskText, syncNextTask } from "./next-task.ts";
 
 export const ACTION_PERMISSIONS: Record<string, AiPermission> = {
   createTask: "task.create", updateTask: "task.update", completeTask: "task.complete",
@@ -46,6 +47,7 @@ export function actionPermission(action: StructuredAction, state: CreatorState):
 export function actionPermissions(action: StructuredAction, state: CreatorState): AiPermission[] {
   const required = [actionPermission(action, state)];
   if (action.name === "updateContent") required.push("content.update");
+  if ((action.name === "updateContent" || action.name === "createContent") && action.args.nextAction) required.push(state.tasks.some((task) => task.id === state.projects.find((project) => project.id === action.args.id)?.nextTaskId) ? "task.update" : "task.create");
   if (action.name === "updateTask") required.push("task.update");
   if (action.name === "uploadMedia") required.push("media.attach");
   return [...new Set(required)];
@@ -72,6 +74,29 @@ export function actionFingerprint(state: CreatorState, action: StructuredAction)
 export function applyAction(state: CreatorState, action: StructuredAction): unknown {
   if (!action || typeof action.name !== "string" || !action.args || typeof action.args !== "object" || Array.isArray(action.args)) throw new ActionError("Ungültige strukturierte Aktion.");
   const input = action.args;
+  if (action.name === "renameMedia") {
+    const media = state.media.find((entry) => entry.id === input.id);
+    if (!media) throw new ActionError("Medium nicht gefunden.",404);
+    media.displayName = text(input.name,"Anzeigename",200,true); return media;
+  }
+  if (action.name === "deleteTask") {
+    const task = state.tasks.find((entry) => entry.id === input.id);
+    if (!task || input.confirm !== true) throw new ActionError("Aufgabenlöschung bitte bestätigen.");
+    state.tasks = state.tasks.filter((entry) => entry.id !== task.id);
+    for (const media of state.media) media.links = media.links.filter((link) => !(link.entityType === "task" && link.entityId === task.id));
+    for (const project of state.projects) syncNextTask(state,project); return { id: task.id };
+  }
+  if (["updateIdea","deleteIdea"].includes(action.name)) {
+    const idea = state.ideas.find((entry) => entry.id === input.id);
+    if (!idea) throw new ActionError("Idee nicht gefunden.",404);
+    if (action.name === "updateIdea") idea.text = text(input.text,"Idee",2000,true);
+    else { if (input.confirm !== true) throw new ActionError("Löschen bitte bestätigen."); state.ideas = state.ideas.filter((entry) => entry.id !== idea.id); }
+    return idea;
+  }
+  if (action.name === "deletePlanning") {
+    if (!state.planning.some((entry) => entry.id === input.id) || input.confirm !== true) throw new ActionError("Planungslöschung bitte bestätigen.");
+    state.planning = state.planning.filter((entry) => entry.id !== input.id); return { id: input.id };
+  }
   if (action.name === "uploadMedia") {
     const entityType = choose(input.entityType, ["project", "task"], "Zuordnung");
     const entityId = text(input.entityId, "Ziel", 100, true);
@@ -88,16 +113,42 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
     if (!found) throw new ActionError("Projekt nicht gefunden.", 404);
     return found;
   };
+  if (action.name === "removeMaterial") {
+    const item = project();
+    if (!item.materials.some((material) => material.id === input.materialId)) throw new ActionError("Materialnotiz nicht gefunden.", 404);
+    item.materials = item.materials.filter((material) => material.id !== input.materialId);
+    item.lastTouchedAt = now(); return item;
+  }
+  if (action.name === "deleteContent") {
+    const item = project();
+    if (input.confirm !== true) throw new ActionError("Projektlöschung bitte bestätigen.");
+    if (state.sessions.some((session) => session.projectId === item.id && !session.endedAt)) throw new ActionError("Bitte zuerst die laufende Session abschließen.", 409);
+    const taskIds = new Set(state.tasks.filter((task) => task.projectId === item.id).map((task) => task.id));
+    state.projects = state.projects.filter((entry) => entry.id !== item.id);
+    state.tasks = state.tasks.filter((task) => !taskIds.has(task.id));
+    state.planning = state.planning.filter((entry) => entry.projectId !== item.id);
+    state.ideas = state.ideas.filter((idea) => idea.projectId !== item.id);
+    for (const media of state.media) media.links = media.links.filter((link) => !(link.entityType === "project" ? link.entityId === item.id : taskIds.has(link.entityId)));
+    if (state.activeProjectId === item.id) state.activeProjectId = state.projects[0]?.id || "";
+    return { id: item.id };
+  }
   if (action.name === "createContent") {
     const timestamp = now();
-    const item: Project = { id: id(), title: text(input.title, "Projektname", 100, true), summary: input.summary === undefined ? "" : text(input.summary, "Beschreibung", 500), status: "active", nextAction: typeof input.nextAction === "string" ? text(input.nextAction, "Nächster Schritt", 500) : "Ersten kleinen nächsten Schritt festlegen.", lastProgress: "Projekt angelegt", lastTouchedAt: timestamp, createdAt: timestamp, pipeline: input.pipeline === undefined ? "ideas" : choose(input.pipeline, pipelines, "Pipeline"), scripts: [], materials: [] };
+    const item: Project = { id: id(), title: text(input.title, "Projektname", 100, true), summary: input.summary === undefined ? "" : text(input.summary, "Beschreibung", 500), status: "active", nextAction: typeof input.nextAction === "string" ? text(input.nextAction, "Nächster Schritt", 500) : "", lastProgress: "Projekt angelegt", lastTouchedAt: timestamp, createdAt: timestamp, pipeline: input.pipeline === undefined ? "ideas" : choose(input.pipeline, pipelines, "Pipeline"), scripts: [], materials: [] };
     state.projects.unshift(item); state.activeProjectId = item.id;
+    const nextAction = item.nextAction; item.nextTaskId = ""; item.nextAction = ""; setNextTaskText(state,item,nextAction);
     return item;
   }
   if (action.name === "updateContent") {
     const item = project();
-    for (const [key, max] of [["title", 100], ["summary", 500], ["nextAction", 500], ["lastProgress", 300], ["caption", 4000]] as const) {
+    for (const [key, max] of [["title", 100], ["summary", 500], ["lastProgress", 300], ["caption", 4000]] as const) {
       if (input[key] !== undefined) item[key] = text(input[key], key, max, key === "title");
+    }
+    if (input.nextAction !== undefined) setNextTaskText(state,item,text(input.nextAction,"Nächste Aufgabe",500));
+    if (input.nextTaskId !== undefined) {
+      const task = state.tasks.find((task) => task.id === input.nextTaskId && task.projectId === item.id && task.status !== "done");
+      if (!task) throw new ActionError("Nächste Aufgabe ist nicht verfügbar.");
+      item.nextTaskId = task.id; syncNextTask(state,item);
     }
     if (input.pipeline !== undefined) item.pipeline = choose(input.pipeline, pipelines, "Pipeline");
     if (input.status !== undefined) item.status = choose(input.status, ["active", "paused", "complete"], "Status");
@@ -127,7 +178,7 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
     if (!state.projects.some((item) => item.id === input.projectId)) throw new ActionError("Projekt nicht gefunden.", 404);
     const timestamp = now();
     const task: Task = { id: id(), projectId: input.projectId as string, title: text(input.title, "Aufgabe", 200, true), description: typeof input.description === "string" ? text(input.description, "Beschreibung", 2000) : "", status: "open", dueAt: input.dueAt === undefined ? null : date(input.dueAt), createdAt: timestamp, updatedAt: timestamp };
-    state.tasks.unshift(task); return task;
+    state.tasks.push(task); syncNextTask(state,state.projects.find((project) => project.id === task.projectId)!); return task;
   }
   if (["updateTask", "completeTask"].includes(action.name)) {
     if (action.name === "completeTask" && Object.keys(input).some((key) => key !== "id")) throw new ActionError("Abschließen ändert nur den Aufgabenstatus.");
@@ -142,7 +193,7 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
     }
     if (input.status !== undefined) task.status = choose(input.status, ["open", "doing", "done"], "Status");
     if (action.name === "completeTask") task.status = "done";
-    task.updatedAt = now(); return task;
+    task.updatedAt = now(); for (const project of state.projects) syncNextTask(state,project); return task;
   }
   if (action.name === "createIdea") {
     const projectId = typeof input.projectId === "string" && input.projectId ? input.projectId : null;
