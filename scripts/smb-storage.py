@@ -88,6 +88,25 @@ def operate(command, source, output, client):
             if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                 raise StorageFailure("Der Projektpfad ist kein Ordner.", 409)
             return {"ok": True, "created": False}
+    if operation == "list":
+        if not stat.S_ISDIR(client.stat(target, **options).st_mode):
+            raise StorageFailure("Der Projektpfad ist kein Ordner.", 404)
+        entries = []
+        with client.scandir(target, **options) as items:
+            for item in items:
+                # Reparse points are intentionally omitted from the browser.
+                if item.is_symlink() or item.smb_info.file_attributes & 0x400:
+                    continue
+                info = item.stat(follow_symlinks=False)
+                entries.append({
+                    "name": item.name,
+                    "directory": item.is_dir(follow_symlinks=False),
+                    "size": info.st_size,
+                })
+        return {"ok": True, "entries": entries}
+    if operation == "mkdir":
+        client.mkdir(target, **options)
+        return {"ok": True}
     if operation == "put":
         size = command["size"]
         if not isinstance(size, int) or size <= 0 or size > MAX_BYTES:
