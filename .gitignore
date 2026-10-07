@@ -2,6 +2,7 @@ node_modules/
 .next/
 out/
 coverage/
+*.tsbuildinfo
 *.log
 npm-debug.log*
 .env
@@ -10,6 +11,8 @@ npm-debug.log*
 data/
 .data/
 .test-data/
+creatoros_brain_export*.json
+creatoros-brain*.json
 *.sqlite
 *.sqlite-*
 *.db

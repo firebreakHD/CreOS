@@ -1,8 +1,10 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { initialState, now, type CreatorState } from "@/lib/model";
+import { initialIntegrations, initialState, now, type CreatorState } from "@/lib/model";
+import { readBrain } from "@/lib/brain";
 
 const storeFile = () => path.join(process.env.CREATOROS_DATA_DIR || path.join(process.cwd(), "data"), "creatoros.json");
+export const dataDirectory = () => path.dirname(storeFile());
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function migrate(value: unknown): CreatorState {
@@ -17,6 +19,12 @@ function migrate(value: unknown): CreatorState {
     updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : now(),
     activeProjectId: typeof state.activeProjectId === "string" ? state.activeProjectId : "",
     buildDay: typeof state.buildDay === "string" ? state.buildDay : "Donnerstag",
+    brain: readBrain(state.brain),
+    tasks: Array.isArray(state.tasks) ? state.tasks : [],
+    planning: Array.isArray(state.planning) ? state.planning : [],
+    media: Array.isArray(state.media) ? state.media : [],
+    integrations: { ai: { ...initialIntegrations().ai, ...state.integrations?.ai }, nas: { ...initialIntegrations().nas, ...state.integrations?.nas } },
+    actionProposals: Array.isArray(state.actionProposals) ? state.actionProposals : [],
   } as CreatorState;
 }
 

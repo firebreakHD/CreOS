@@ -1,10 +1,9 @@
 {
   "name": "creatoros",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "private": true,
   "description": "Ein persönlicher Start- und Produktionsassistent für Creator.",
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 -p 3000",
     "build": "next build && node scripts/copy-standalone-assets.mjs",
     "start": "node .next/standalone/server.js"
   },

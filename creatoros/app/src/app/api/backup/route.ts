@@ -1,3 +1,4 @@
+import { rejectUntrustedRequest } from "@/lib/request-guard";
 import { NextResponse } from "next/server";
 import { exportBackup, readState, replaceState, validBackup } from "@/lib/store";
 
@@ -18,6 +19,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const untrusted = rejectUntrustedRequest(request); if (untrusted) return untrusted;
   let backup: unknown;
   try { backup = await request.json(); } catch { return NextResponse.json({ error: "Die Datei enthält kein gültiges JSON." }, { status: 400 }); }
   if (!validBackup(backup)) return NextResponse.json({ error: "Diese CreatorOS-Sicherung wird nicht unterstützt." }, { status: 400 });

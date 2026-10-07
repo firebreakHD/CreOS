@@ -1,5 +1,19 @@
+import type { BrainStore } from "./brain";
+
 export type ScriptSection = { id: string; title: string; body: string; done: boolean };
 export type MaterialItem = { id: string; name: string; note: string; kind: "video" | "audio" | "image" | "note" };
+export type Task = { id: string; projectId: string; title: string; description: string; status: "open" | "doing" | "done"; dueAt: string | null; createdAt: string; updatedAt: string };
+export type PlanningEntry = { id: string; title: string; startsAt: string; projectId: string | null; createdAt: string };
+export type MediaRole = "asset" | "reference" | "raw" | "export" | "other";
+export type MediaLink = { entityType: "project" | "task"; entityId: string; role: MediaRole };
+export type MediaRecord = { id: string; originalFilename: string; displayName: string; mimeType: string; fileSize: number; storageProvider: "local" | "nas"; storageId: string; relativePath: string; createdAt: string; links: MediaLink[] };
+export type AiPermission = "task.create" | "task.update" | "task.complete" | "content.create" | "content.update" | "content.schedule" | "media.upload" | "media.attach" | "planning.write" | "idea.create";
+export type IntegrationStatus = "not_configured" | "connected" | "error" | "incomplete";
+export type AiConfig = { enabled: boolean; provider: "openai"; model: string; secretId: string; mode: "suggest" | "confirm" | "auto"; permissions: AiPermission[]; requireConfirmation: AiPermission[]; status: IntegrationStatus; message: string };
+export type NasConfig = { enabled: boolean; name: string; host: string; port: number; protocol: "webdav-https" | "webdav-http"; baseFolder: string; username: string; secretId: string; storageId: string; status: IntegrationStatus; message: string };
+export type Integrations = { ai: AiConfig; nas: NasConfig };
+export type StructuredAction = { name: string; args: Record<string, unknown> };
+export type ActionProposal = { id: string; action: StructuredAction; createdAt: string; expiresAt: string; status: "pending" | "executing" | "applied" | "rejected"; baseFingerprint: string };
 export type Project = {
   id: string;
   title: string;
@@ -12,6 +26,10 @@ export type Project = {
   pipeline: "ideas" | "planned" | "recorded" | "editing" | "published";
   scripts: ScriptSection[];
   materials: MaterialItem[];
+  caption?: string;
+  hooks?: string[];
+  platform?: "Instagram" | "TikTok" | "YouTube" | "Other";
+  publishAt?: string | null;
 };
 export type Idea = { id: string; text: string; projectId: string | null; createdAt: string; pending?: boolean };
 export type Session = {
@@ -34,10 +52,21 @@ export type CreatorState = {
   projects: Project[];
   ideas: Idea[];
   sessions: Session[];
+  brain: BrainStore;
+  tasks: Task[];
+  planning: PlanningEntry[];
+  media: MediaRecord[];
+  integrations: Integrations;
+  actionProposals: ActionProposal[];
 };
 
 export const id = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
+
+export const initialIntegrations = (): Integrations => ({
+  ai: { enabled: false, provider: "openai", model: "gpt-6-luna", secretId: "", mode: "suggest", permissions: [], requireConfirmation: ["content.schedule", "media.upload"], status: "not_configured", message: "" },
+  nas: { enabled: false, name: "", host: "", port: 5006, protocol: "webdav-https", baseFolder: "/CreatorOS", username: "", secretId: "", storageId: "", status: "not_configured", message: "" },
+});
 
 export function initialState(): CreatorState {
   const timestamp = now();
@@ -72,5 +101,7 @@ export function initialState(): CreatorState {
       { id: id(), text: "Was aus alten Projekten noch zu retten ist", projectId: "lego-october-comeback", createdAt: timestamp },
     ],
     sessions: [],
+    brain: { entries: [], revision: 0, updatedAt: null },
+    tasks: [], planning: [], media: [], integrations: initialIntegrations(), actionProposals: [],
   };
 }

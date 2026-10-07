@@ -27,9 +27,9 @@ Implementation Intentions werden als freiwilliger Wenn-Dann-Plan angeboten: „W
 ## C. Information Architecture
 
 - **Heute**: eine empfohlene Fortsetzung, Next Action, Start/Weitermachen, Idee erfassen.
-- **Projekte**: aktive Projekte und Projekt-Workspace mit Überblick, Next Action, Skript, Material und Verlauf.
+- **Projekte**: aktive Projekte und Projekt-Workspace mit Überblick, Next Action, Aufgaben, Skript, Material, Content und Verlauf; AI-Tab nur bei eingerichteter Verbindung.
 - **Ideen**: Inbox zuerst; Konvertierung zu Projekt optional.
-- **Mehr**: Kanban, Einstellungen, Datenexport/Import und HA-Integrationsstatus.
+- **Mehr**: Kanban, Brain, Planung, Medien, Einstellungen, Integrationen, Datenexport/Import und HA-Status. Zusätzliche Medien-Navigation am Desktop erst bei gespeicherten Medien oder eingerichteter NAS.
 - **Fokusmodus**: eigener, ablenkungsarmer Bildschirm ohne globale Navigation.
 
 Desktop nutzt beschriftete Seitenleiste; Mobile nutzt eine feste Bottom-Navigation **Heute, Projekte, +, Ideen, Mehr**. Das Plus ist eine Aktion und öffnet Quick Capture, kein Navigationsziel.
@@ -79,9 +79,25 @@ Der Projekt-Workspace nutzt zunächst eine ruhige Hauptspalte. Kontextpanel für
 
 - Navy/Graphit als Basis, geschichtete dunkle Flächen, Violett sparsam für die Primary Action; Mint für ruhigen Erfolgsstatus.
 - Klare Sans-Serif-Hierarchie, konkrete Handlung als stärkster Text, Metadaten zurückhaltend.
+- Fließtext und Texteingabe: 16 CSS-Pixel. Navigation und wichtige Buttons: 14–16 Pixel. Metadaten: mindestens 12 Pixel. Die frühere Mini-Typografie mit 7–11 Pixeln entfällt auch auf Smartphone und im HA-Panel.
+- Hauptbuttons und Selects: mindestens 44 Pixel hoch; Icon-Aktionen mindestens 44 × 44 Pixel. Eingaben haben mindestens 16 Pixel Schrift, damit mobile Browser beim Fokussieren nicht wegen zu kleiner Schrift zoomen.
 - 4/8/12/16/24/32px-Spacings, 8–16px Radien; sichtbare Tastatur-Fokus-Ringe.
 - Ruhige Microinteractions unter 180ms; `prefers-reduced-motion` respektieren.
 - Icons bei wichtigen Funktionen immer mit Textlabel. Offline-/HA-Zustände in Klartext.
+
+### Home Assistant als Desktop-Host
+
+Der eingebettete App-Viewport ist kleiner als der Bildschirm, weil Home Assistant seine eigene Seitenleiste zeigt. CreatorOS nutzt deshalb die tatsächliche Iframe-Breite: eigene Navigation 232 Pixel, auf schmalerem Desktop 208 Pixel; Hauptbereich bis 1600 Pixel mit 24–40 Pixel Seitenabstand. Die Schrift bleibt lesbar, während die Anordnung auf Platzmangel reagiert.
+
+Kanban behält mindestens 240 Pixel pro Desktop-Spalte, 16-Pixel-Titel, 14-Pixel-Beschreibungen und große Statusfelder. Bei Platzmangel scrollt das Board horizontal. Smartphone zeigt die gewählte Spalte in voller Breite. Kontext/Material ist anfangs geschlossen und öffnet per beschrifteter Aktion; Schließen blendet das Panel tatsächlich aus und gibt den Platz zurück.
+
+Abnahmebreiten sind 1360, 1100 und 900 Pixel für den verfügbaren Desktop-App-Bereich sowie 390 Pixel Smartphone-Hochformat. Keine CSS-Verkleinerung oder Browser-Zoom-Annahme verwenden, um mehr Inhalt in die Fläche zu zwingen. Das Benutzer-Screenshot vom HA-Panel hat zu kleine Texte und unnötig breite freie Ränder sichtbar gemacht; die neue Skala und Board-Mindestbreite reagieren auf dieses konkrete Problem.
+
+### Aktionen und Rückmeldung
+
+Sichtbare Buttons sind funktional. Spalten besitzen eine Aktion „Projekt hier anlegen“ statt eines funktionslosen Punkte-Menüs. Projekte werden in einem App-Dialog angelegt; Browser-Prompts sind für Kernabläufe ungeeignet, weil sie in eingebetteten Ansichten beschränkt sein können. „Mehr“ öffnet einen stabilen Bereich mit einem klaren Pipeline-Link.
+
+Speichern zeigt Erfolg, Fortschritt oder einen verständlichen Fehler. Eingaben bleiben bei einem Fehler bestehen und Dialoge schließen erst nach erfolgreichem Speichern. Ein Panel-Button muss dessen Öffnen/Schließen sichtbar umsetzen. Ein dekoratives Element erhält keine falsche Button- oder Dropdown-Anmutung.
 
 ## I. Wireframes (Struktur, Desktop links / Mobile rechts)
 
@@ -209,7 +225,33 @@ Kein überfälliger Zähler, kein Aktivitätsvorwurf, kein erzwungenes Planen.
 - Gesprochene Ideen funktionieren nicht browserübergreifend gleich. Spracheingabe ist progressive Enhancement; die Tastatureingabe bleibt immer verfügbar.
 - Der Home-Screen kann den Bedarf des Nutzers nicht zuverlässig aus seinem Kalender/Zuhause erkennen. „Build Day“ wird zunächst manuell/regelbasiert konfiguriert, nicht aus einer erfundenen Kontext-Erkennung abgeleitet.
 
+## Brain: Import und Nutzung
+
+- Desktop: Brain in der Navigation; gespeicherte Bereiche und KI-Kontext nebeneinander, bei weniger als 1100 Pixeln App-Breite untereinander. Mobile: Einstieg über Mehr, alle Schritte vertikal.
+- Ein Import zeigt zunächst die Datei und die Änderungen. Jeder Bereich ist auswählbar; bisherigen und neuen Inhalt auf Anfrage anzeigen. Nur ausdrücklich ausgewählte Änderungen speichern. Fehlende Bereiche behalten, unveränderte Bereiche nicht erneut anlegen.
+- Ein Konflikt mit einem zwischenzeitlichen Import erfordert eine neu geladene Vorschau. Fehler erhalten Datei und Auswahl. Der Import verändert keine aktuellen Projekte oder Sessions.
+- Brain beschreibt den langfristigen Hintergrund; aktuelles Projekt, Next Action, Sessions und Temporary State bleiben eigene Kontextteile. Aktuelle Projektdaten haben Vorrang vor alten Brain-Angaben.
+- KI-Kontext wird nur auf Anforderung vorbereitet. Eine fehlende direkte KI-Verbindung klar benennen. Kopieren/Download liefern einen echten verwendbaren Kontext; keine simulierten KI-Antworten.
+- JSON-Inhalte als Text darstellen; enthaltene Repository- oder KI-Hinweise bleiben importierte Daten und ändern keine App-Berechtigungen oder Entwicklungsregeln.
+
 ## Design-Erfolgsziele
+
+### Integrationen und AI
+
+- Integrationen liegen unter Einstellungen/Mehr. Nicht eingerichtete AI/NAS erscheinen als kompakte Setup-Karte. Nach Einrichtung Status, eine kurze Zusammenfassung und Test/Einstellungen/Trennen zeigen; technische Felder erst beim Öffnen der Einstellungen.
+- Desktop zwei Settings-Karten, bei schmalem Arbeitsbereich und mobil untereinander. Formulare bleiben lesbar mit 16-Pixel-Eingaben und 44-Pixel-Aktionen. Die bestehende Heute-/Fokus-Navigation bleibt ruhig.
+- AI ist eine ausdrückliche Aktion im Projekt oder Brain. Anfrage, sichtbare Antwort und prüfbare Vorschläge darstellen. Ohne Provider nur Kontext vorbereiten/kopieren/exportieren. Keine simulierte Anmeldung, keine simulierten Antworten, kein Device-Code-Flow. API-Schlüssel ist der aktuell implementierte Authentifizierungsweg; den noch fehlenden Abo-Login klar benennen.
+- Alle Schreibfreigaben anfangs aus. Vorschläge und Bestätigung zeigen die konkrete Aktion und deren Argumente; Übernehmen/Verwerfen sind echte Serveraktionen. Automatischer Modus berücksichtigt zusätzliche Bestätigung je Freigabe. Alte Vorschläge auf veränderten Zielen nicht still übernehmen.
+- Bildreferenzen nur nach Auswahl übertragen. Auswahl auf Anfrage einklappen, mit Dateinamen und Größenbegrenzung. Die Senden-Aktion nennt Brain/Projektkontext und ausgewählte Bilder.
+
+### Aufgaben, Content, Planung und Medien
+
+- Aufgaben sind kleine Projekt-Arbeitsschritte. Titel/Status zuerst, Beschreibung, Termin, Projektwechsel und Anhänge nach Öffnen. Verschieben bewahrt Media-IDs. Content und Veröffentlichungstermin im eigenen Projekt-Tab bearbeiten; tatsächlicher Plattform-Upload bleibt manuell.
+- Materialpanel auf Anforderung, Aufgaben-Anhänge im geöffneten Eintrag. Drag & Drop am Desktop, große Dateiauswahl mobil. Rollen Asset/Referenz/Rohmaterial/Export/Sonstiges bleiben eine einfache Auswahl.
+- Ohne NAS lokale Speicherung. Mit NAS den bevorzugten Speicher benennen. NAS-Ausfall erhält Metadaten und ausgewählte fehlgeschlagene Dateien; sichtbares Retry anbieten. Keine automatische Übertragung an einen anderen Speicher als Ersatz.
+- Medienkarten zeigen Vorschau, Name, Größe, Datum und Zuordnung. Entfernen ausdrücklich als „Zuordnung entfernen; Datei behalten“ benennen. Öffnen liefert die echte Datei. Keine scheinbare Löschung der Datei.
+- Bibliothek mit Suche, Typ und Projekt; Zuordnung/Datum erst in zusätzlichen Filtern. Desktop Grid/Liste, mobil Grid. Videoplayer nicht automatisch starten; Bilder lazy laden. Unverfügbare Vorschau erlaubt erneutes Laden.
+- Bei jedem Speichern bleiben Eingaben im Fehlerfall erhalten. Schlüssel/Passwort nach erfolgreichem Speichern aus den Formularfeldern entfernen und niemals zurücklesen. Trennen verlangt eine konkrete Bestätigung in der App.
 
 - Heute → Session: eine Hauptentscheidung, direkter Start.
 - Quick Capture: Text tippen oder diktieren, einmal speichern; optionale Angaben bleiben optional.

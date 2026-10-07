@@ -1,3 +1,4 @@
+import { rejectUntrustedRequest } from "@/lib/request-guard";
 import { NextResponse } from "next/server";
 import { emitHomeAssistantEvent } from "@/lib/home-assistant";
 import { now } from "@/lib/model";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const untrusted = rejectUntrustedRequest(request); if (untrusted) return untrusted;
   let nextAction = "";
   try { const body = await request.json(); if (typeof body.nextAction === "string") nextAction = body.nextAction.trim().slice(0, 500); } catch {}
   const endedAt = now();

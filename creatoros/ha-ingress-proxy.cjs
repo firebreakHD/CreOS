@@ -45,10 +45,12 @@ const server = http.createServer((incoming, outgoing) => {
     outgoing.end("Missing Home Assistant ingress path");
     return;
   }
-  const headers = { ...incoming.headers, host: targetUrl.host, "accept-encoding": "identity", "x-forwarded-prefix": base };
-  const proxyRequest = http.request({ hostname: targetUrl.hostname, port: Number(targetUrl.port || 80), method: incoming.method, path: upstreamPath(incoming.url, base), headers }, (response) => {
+  const headers = { ...incoming.headers, host: targetUrl.host, "accept-encoding": "identity", "x-forwarded-prefix": base, "x-forwarded-host": incoming.headers["x-forwarded-host"] || incoming.headers.host };
+  const appPath = upstreamPath(incoming.url, base);
+  const isDataApi = new URL(appPath, "http://localhost").pathname.startsWith("/api/");
+  const proxyRequest = http.request({ hostname: targetUrl.hostname, port: Number(targetUrl.port || 80), method: incoming.method, path: appPath, headers }, (response) => {
     const contentType = String(response.headers["content-type"] || "");
-    if (!/(?:text\/|javascript|json)/i.test(contentType)) {
+    if (isDataApi || !/(?:text\/|javascript|json)/i.test(contentType)) {
       outgoing.writeHead(response.statusCode || 502, response.headers);
       response.pipe(outgoing);
       return;

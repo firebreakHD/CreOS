@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 -p 3000",
     "build": "next build && node scripts/copy-standalone-assets.mjs",
-    "start": "node .next/standalone/server.js"
+    "postbuild": "node scripts/export-ha-addon.mjs",
+    "build:ha": "npm run build",
+    "start": "node .next/standalone/server.js",
+    "test": "node --import ./tests/register-aliases.mjs --test tests/*.test.mjs",
+    "test:api": "node --test tests/api-smoke.integration.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.49.0",

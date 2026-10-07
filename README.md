@@ -7,7 +7,7 @@ CreatorOS ist ein persönlicher Start- und Produktionsassistent: Er zeigt die vo
 - Next.js App Router, React und TypeScript; eine responsive PWA für Desktop und Smartphone.
 - Ein Node.js-API-Server ist die gemeinsame Datenquelle für alle Geräte.
 - JSON-Zustand in `CREATOROS_DATA_DIR/creatoros.json`, atomar geschrieben. Home Assistant führt keine CreatorOS-Daten.
-- Home Assistant Add-on unter `HA_Addon/creatoros`: HA Ingress, separates persistentes `/data`-Volume und optionale Supervisor-Ereignisse.
+- Home Assistant Add-on unter `creatoros/`: HA Ingress, separates persistentes `/data`-Volume und optionale Supervisor-Ereignisse. App-Quellcode und Add-on-Paket bleiben gemeinsam in diesem `Build`-Repository.
 - Offline kann der App-Shell-Cache geöffnet und eine Idee lokal vorgemerkt werden. Die Idee wird mit stabiler ID beim Wiederverbinden synchronisiert.
 - Home Assistant und AI sind optionale Integrationen; der CreatorOS-Kern läuft unabhängig.
 
@@ -37,10 +37,10 @@ Voraussetzung: Node.js 22 oder neuer.
 
 ```powershell
 npm install
-npm run dev
+npm run dev -- --port 3100
 ```
 
-CreatorOS läuft lokal auf `http://localhost:3000`. Daten werden im lokalen `data/`-Ordner angelegt. `data/`, Datenbanken, `.env`, Build-Ausgaben und Abhängigkeiten sind aus Git ausgeschlossen.
+CreatorOS läuft mit diesem Aufruf lokal auf `http://localhost:3100`; Port 3000 ist im gemeinsamen Workspace durch die WG-App belegt. Daten werden im lokalen `data/`-Ordner angelegt. `data/`, Datenbanken, `.env`, Build-Ausgaben und Abhängigkeiten sind aus Git ausgeschlossen.
 
 ## Konfiguration
 
@@ -83,7 +83,83 @@ automation:
 
 Ein REST-Sensor kann `http://creatoros:3000/api/home-assistant/status` innerhalb des HA-Netzes abfragen. Geräteaktionen und Zeitpläne bleiben in Home Assistant. Keine CreatorOS-Ideen als HA-Helper-Datenbank duplizieren.
 
-In HA unter **Einstellungen → Apps → Repositories** das später erstellte GitHub-Repository eintragen, App installieren und optional `home_assistant_shared_secret` in den Add-on-Optionen setzen. Nach dem Anlegen des GitHub-Repositories muss dessen URL in `repository.yaml` eingetragen werden. Der genaue interne Netzwerkpfad und Add-on-Build müssen an der persönlichen HA-Instanz einmalig geprüft werden; auf diesem Rechner ist kein HA-Supervisor konfiguriert.
+In HA unter **Einstellungen → Apps → Repositories** `https://github.com/firebreakHD/CreOS` eintragen, App installieren und optional `home_assistant_shared_secret` in den Add-on-Optionen setzen. Die URL ist bereits in `repository.yaml` eingetragen. Der genaue interne Netzwerkpfad und Add-on-Build müssen an der persönlichen HA-Instanz einmalig geprüft werden; auf diesem Rechner ist kein HA-Supervisor konfiguriert.
+
+## Brain und KI-Kontext
+
+**Desktop → Brain** oder **Mobile → Mehr → Brain & KI-Kontext** öffnet den langfristigen Kontext.
+
+1. **Brain-Datei importieren**: strukturierte JSON-Datei auswählen (maximal 512 KB). Verschachtelte Bereiche und Listen bleiben erhalten.
+2. In der Vorschau neue, geänderte und unveränderte Bereiche prüfen. Nur ausgewählte Bereiche werden übernommen. Fehlende Bereiche werden nicht gelöscht; geänderte Bereiche ersetzen den jeweiligen ausgewählten Bereich vollständig.
+3. **Brain exportieren** erzeugt eine portable Datei im Format `creatoros-brain`, Version 1. Erneuter Import desselben Inhalts erzeugt keine Duplikate.
+4. Im Bereich **Kontext für die KI** Projekt und Anfrage wählen. **KI-Kontext vorbereiten** verbindet Brain, aktuellen Projektstand, Aufgaben, Medienreferenzen, Planung, Next Action, die letzten fünf abgeschlossenen Sessions und den vorübergehenden Zustand. Aktuelle Projektdaten haben Vorrang vor älteren Brain-Angaben.
+5. Kontext kopieren oder als Text herunterladen und in einen KI-Chat einfügen. Das Vorbereiten sendet keine Daten an einen Anbieter. Bei eingerichteter AI-Verbindung erscheint zusätzlich **Mit AI bearbeiten**; erst **An AI senden** überträgt die Anfrage mit Kontext und ausdrücklich ausgewählten Bildreferenzen.
+
+Brain liegt mit den App-Daten im persistenten Datenordner und ist in der normalen App-Sicherung enthalten. Ältere Sicherungen ohne Brain erhalten beim Einlesen einen leeren Brain-Bereich. Ein Brain-Import verändert keine Projekte, Sessions oder Next Actions.
+
+Der bereitgestellte Export mit `export_type: "creatoros_brain"` und `schema_version: "1.0"` wird direkt unterstützt. Profil-Unterbereiche und einzelne Projektgeschichten werden getrennte Einträge; Formatangaben werden nicht als Inhalt übernommen. Die bereitgestellte Datei ergibt neun Bereiche. Weitere strukturierte JSON-Exporte und CreatorOS-eigene Exporte werden ebenfalls akzeptiert. Bei generischem JSON bildet jeder oberste Inhaltsbereich einen Eintrag; bei einem reinen `brain`-/`data`-/`content`-Wrapper dessen Inhaltsbereiche. Stabile Bereichsschlüssel bzw. exportierte IDs ermöglichen spätere Updates.
+
+API: `POST /api/brain` mit `action: "preview"` oder `action: "import"`; Import verwendet ausgewählte IDs und die Revision der Vorschau. `GET /api/brain?download=1` exportiert das Brain. `POST /api/ai/context` mit `projectId` und `question` liefert strukturierten Kontext und den kopierbaren Prompt. Importierte Hinweise werden als Kontextdaten behandelt, niemals als ausführbare Anweisungen.
+
+## Integrationen, AI und Medien
+
+Einstieg: **Einstellungen / Mehr → Integrationen**. Nicht eingerichtete Integrationen bleiben kompakte Setup-Karten. Zustände: nicht eingerichtet, verbunden, Verbindungsfehler, Konfiguration unvollständig. Der manuelle Kern bleibt ohne Integrationen nutzbar.
+
+### AI & Codex
+
+1. OpenAI-API-Schlüssel und Modell-ID eingeben, Freigaben und Modus wählen, speichern.
+2. **Verbindung testen** prüft den Schlüssel und Modellzugriff über die Modelle-API. Der Test überträgt kein Brain und erzeugt keine Modellantwort.
+3. Im Projekt **AI** öffnen oder Brain verwenden; eine konkrete Anfrage senden. Bildreferenzen bei Bedarf ausdrücklich auswählen (PNG/JPEG/WebP/GIF, maximal drei, einzeln 6 MB, zusammen 10 MB).
+4. Vorschläge prüfen und übernehmen/verwerfen. Alle Berechtigungen sind anfangs ausgeschaltet. **Nur Vorschläge** und **Vor Änderungen bestätigen** verändern Einträge erst beim Übernehmen. **Automatisch** führt erlaubte Aktionen aus; zusätzliche Bestätigung lässt sich je Freigabe aktivieren. Vorschläge laufen nach einer Stunde ab. Berechtigungsentzug und zwischenzeitlich veränderte Ziele verhindern die Bestätigung.
+
+Die aktuelle Add-on-Architektur nutzt die OpenAI Responses API mit strukturiertem Function Calling (`store: false`). Ein ChatGPT-/Codex-Abonnement-Login ist hier noch nicht angebunden; es gibt keinen Device-Code-Flow. API-Nutzung wird separat abgerechnet. Ein normaler Abonnement-Login benötigt eine eigene registrierte Anbindung bzw. einen geeigneten Codex-Dienst; vorhandene Codex-Login-Dateien werden nicht übernommen. Siehe [offizielle OpenAI-Authentifizierung](https://learn.chatgpt.com/docs/auth), [Function Calling](https://developers.openai.com/api/docs/guides/function-calling) und [Bildreferenzen](https://developers.openai.com/api/docs/guides/images-vision).
+
+| Gemeinsame Action | Funktion |
+|---|---|
+| `createTask`, `updateTask`, `completeTask` | Aufgaben erstellen, bearbeiten, terminieren, Status ändern, zwischen Projekten verschieben und abschließen |
+| `createContent`, `updateContent`, `scheduleContent` | Projekte/Content, Titel, Beschreibung, Caption, Hooks, Next Action, Skript, Pipeline und Veröffentlichungstermin |
+| `createIdea` | Ideen speichern |
+| `attachMedia`, `detachMedia` | Bestehende Media-ID als Asset, Referenz, Rohmaterial, Export oder Sonstiges zuordnen / Zuordnung entfernen |
+| `uploadMedia` | KI-erstellte TXT-/JSON-Datei mit menschlichem Namen in den bevorzugten Speicher übertragen; Upload- und Zuordnungsfreigabe erforderlich |
+| `createPlanning`, `updatePlanning` | Planungseinträge erstellen und bearbeiten |
+
+UI und AI verwenden dieselbe serverseitige Action-Schicht. `/api/actions` nimmt manuelle Aktionen und Vorschlagsentscheidungen entgegen; ein vom Client angegebener AI-Aktor wird abgelehnt. `/api/ai/chat` ruft den Provider auf und prüft jedes Tool erneut. Maximal acht Aktionen und vier Modellrunden pro Anfrage. Importierte Brain-Texte und Bilder sind Referenzdaten und können keine Freigaben setzen.
+
+### NAS / Medienspeicher
+
+1. WebDAV auf der NAS aktivieren und einen Benutzer mit Zugriff auf den gewünschten Basisordner anlegen.
+2. Host/IP, Port, Benutzer, Passwort und WebDAV-Basisordner in CreatorOS speichern. HTTPS ist Standard; das Zertifikat muss für den angegebenen Host gültig und vertrauenswürdig sein. Der voreingestellte Port 5006 ist anpassbar; HTTP ist optional und überträgt Zugangsdaten unverschlüsselt.
+3. **Verbindung testen** prüft den vorhandenen Basisordner per `PROPFIND`, ohne Dateien oder Unterordner anzulegen. Fehlende Ordner, Authentifizierungsprobleme und nicht erreichbare NAS werden erklärt. Der Test weist noch keine Schreibberechtigung nach; diese wird beim Upload geprüft.
+4. Im Projekt **Material** oder in einer geöffneten Aufgabe unter **Anhänge & Referenzen** Dateien ablegen bzw. auswählen. Bei eingerichteter NAS werden Dateien dort gestreamt; ohne NAS im lokalen Datenordner `media/`. Bei NAS-Ausfall bleibt der Upload mit erneuter Versuchsmöglichkeit erhalten und speichert nicht unbemerkt lokal.
+
+Der Storage-Provider unterstützt `storeFile`, `getFile`, `deleteFile`, `moveFile`. WebDAV verwendet serverseitig Basic Authentication, `MKCOL` nur für benötigte Ordner, `PUT` für Dateien und `GET` mit Byte-Ranges für Vorschauen/Video. Credentials folgen keinen HTTP-Weiterleitungen. HTTPS-Zertifikatsprüfung bleibt aktiviert. Absolute Pfade und Traversal werden abgelehnt. Dateiübertragung: maximal 500 MB, erlaubte Bild-/Video-/Audio-/PDF-/Text-/Office-/ZIP-Typen, keine ausführbaren Dateien oder HTML/SVG. Office/ZIP werden nicht ausgeführt oder entpackt.
+
+Beispielstruktur unter dem konfigurierten Root:
+
+```text
+CreatorOS/
+  Media/Projects/LEGO – Oktober Comeback_a83fab/
+    Images/2026-10-07_thumbnail_f31c9e22.jpg
+    Tasks/Documents/2026-10-07_Skript-Entwurf_c4d82a61.txt
+```
+
+Ordner und ursprüngliche Dateinamen bleiben lesbar; kurze IDs vermeiden Kollisionen. Projekt und Content nutzen bereits dasselbe Datenmodell, deshalb entsteht kein zweiter paralleler Content-Speicher. Ordner werden nur bei Bedarf erzeugt.
+
+**Referenzen:** Projekt/Aufgabe → Media-ID → Storage-Datensatz mit Provider, Speicher-ID und relativem Pfad. Beziehungen bleiben bei Projekt-/Aufgabenänderungen erhalten. `moveFile` bereitet spätere Umbenennung vor; eine Dateiverschiebe-UI ist noch nicht vorhanden. Externe Umbenennungen auf der NAS müssen später am Storage-Datensatz angepasst werden und werden nicht automatisch erkannt.
+
+**Medienübersicht:** Suche nach Datei und Zuordnung, Typ-/Projektfilter, zusätzliche Zuordnungs-/Datumsfilter, Desktop Grid/Liste, mobil Grid. Entfernen löst die Zuordnung und behält die Datei. Trennen einer NAS löscht keine Dateien/Metadaten. Beim Wiederverbinden desselben Protokolls/Hosts/Ports/Basisordners erhalten alte Referenzen wieder Zugriff. Ein anderer Speicher übernimmt alte Pfade nicht automatisch.
+
+### Zugangsdaten und Backups
+
+App-State enthält ausschließlich zufällige Credential-Verweise. API-Schlüssel und NAS-Passwort liegen AES-256-GCM-verschlüsselt in `CREATOROS_DATA_DIR/integrations.vault.json`; der zufällige Schlüssel liegt separat in `integrations.key`. Im Add-on beides unter `/data`. Der Server muss darauf zugreifen können; die Verschlüsselung schützt nicht gegen einen vollständig kompromittierten Host. Frontend, Logs und normale JSON-Sicherungen enthalten keine Passwörter oder API-Schlüssel.
+
+Das JSON-Backup enthält Brain, Projekte, Aufgaben, Planung, Media-Metadaten und Konfiguration; keine Mediendateien und keinen Credential-Vault. Für vollständige Wiederherstellung den persistenten App-Datenordner privat sichern (einschließlich lokalem `media/`, Schlüssel und Vault) und NAS-Dateien mit normalen NAS-Backups sichern. Nach reinem JSON-Restore auf einem neuen Host Zugangsdaten erneut eingeben und denselben NAS-Endpunkt verwenden.
+
+### Prüfung und aktuelle Grenzen
+
+`npm test` prüft Export, Brain-Merge, Actions/Freigaben, verschlüsselte Credentials, Bildauswahl sowie lokalen und simulierten WebDAV-Speicher. Nach dem Produktionsbuild prüft `npm run test:api` mit isolierten Daten Brain-Import/Export/Konflikte, manuelle Projekte/Ideen/Sessions, Aufgaben/Content/Planung, Datei-Upload/Byte-Ranges/Zuordnung, Integrationszustände, Origin-Schutz, Backup/Restore und Neustart-Persistenz. Keine echten Provider-Anfragen in automatisierten Tests.
+
+Noch nicht angebunden: ChatGPT-/Codex-Abo-Login, automatische Veröffentlichung zu sozialen Plattformen, KI-Bild-/Videoerzeugung, Video-/Audioanalyse, SMB/NFS/S3/Cloud-Provider, Offline-Upload-Queue, automatische NAS-Dateisuche und Verschieben/Umbenennen in der UI. Echte NAS-/OpenAI-/HA-Verbindung benötigt die persönlichen Endpunkte/Zugangsdaten; Container und visuelle HA-Ansicht müssen an der Instanz geprüft werden.
 
 ## Build und Home-Assistant-Export
 
@@ -91,13 +167,18 @@ In HA unter **Einstellungen → Apps → Repositories** das später erstellte Gi
 npm run build
 ```
 
-Der App-Build verwendet Next.js standalone. Dieser Ordner `Build/` ist die Repository-Wurzel für GitHub Desktop. Vor einem Add-on-Commit Quellcode in das Add-on-Paket kopieren:
+Der App-Build verwendet Next.js standalone. Dieser Ordner `Build/` bleibt die bestehende Repository-Wurzel für GitHub Desktop. Jeder erfolgreiche `npm run build` ruft automatisch `postbuild` auf: Das Add-on-Paket in `creatoros/app/` wird mit dem aktuellen Quellcode ersetzt und die Patch-Version in `creatoros/config.yaml` erhöht. Git-Metadaten, Remote-URL und lokale Daten bleiben erhalten. Es wird kein weiterer Ausgabeordner angelegt.
+
+Für denselben vollständigen Ablauf funktionieren auch:
 
 ```powershell
+npm run build:ha
 .\scripts\prepare-addon.ps1
 ```
 
-Das Skript synchronisiert nur die App-Dateien nach `creatoros/app`; es lässt `.git`, lokale Daten und Abhängigkeiten in Ruhe. Home Assistant erwartet `repository.yaml` und `creatoros/config.yaml` direkt in dieser Repository-Wurzel.
+Aus dem übergeordneten Projektordner funktionieren `npm run build`, `Erstelle-Addon-Build.ps1` und `HA_Addon/build.ps1`; sie bauen dasselbe Projekt in `Build`. Home Assistant erwartet `repository.yaml` und `creatoros/config.yaml` direkt in der Repository-Wurzel. Nach Commit/Push aktualisiert HA seine Repository-Liste und zeigt die höhere Version als Update. Das Container-Image wird beim Installieren/Aktualisieren von Home Assistant aus dem Dockerfile gebaut. Docker/HA-Supervisor sind auf dem Entwicklungsrechner nicht installiert, daher wird hier der Produktionsbuild geprüft und das vollständige Add-on-Quellpaket erzeugt.
+
+Das Docker-Paket enthält bewusst keinen lokalen Export-Hook. Der Container-Build kompiliert die App einmal und löst keinen weiteren Paketexport aus. `npm test` prüft Versionsfortschritt, veraltete Dateien, den Erhalt der Git-Konfiguration und den Schutz lokaler Daten beim Export.
 
 ## Daten, Backup, Update und Restore
 
@@ -105,9 +186,9 @@ Das Skript synchronisiert nur die App-Dateien nach `creatoros/app`; es lässt `.
 - **Mehr → Sicherung herunterladen** exportiert ein versioniertes JSON-Backup; Restore validiert Format und Schema und schreibt atomar.
 - Für ein zusätzliches Host-Backup regelmäßig den persistenten HA-App-Ordner unter `/data` sichern und Restore nach Add-on-Neuinstallation über die UI ausführen.
 - Schema-Änderungen bekommen eine neue `schemaVersion` und eine explizite Migration. Unbekannte Versionen werden abgelehnt, nicht überschrieben.
-- Update: Quellcode ändern → UI-/API-Prüfung → `npm run build` → `scripts/prepare-addon.ps1` → GitHub Desktop Commit/Push → HA Add-on Repository aktualisieren → Add-on aktualisieren. `/data` bleibt als separates Volume erhalten.
+- Update: Quellcode ändern → UI-/API-Prüfung → `npm run build` (inklusive automatischem Add-on-Export und Versionserhöhung) → GitHub Desktop Commit/Push → HA Add-on Repository aktualisieren → Add-on aktualisieren. `/data` bleibt als separates Volume erhalten.
 - Ein neuer Quellcodebuild startet die App nicht ungefragt neu. Home Assistant zeigt die Add-on-Version als verfügbares Update an.
 
 ## GitHub Desktop
 
-GitHub Desktop kann diesen Ordner als lokales Repository initialisieren und mit einem privaten GitHub-Repository verbinden. Wähle beim Erstellen eines Repositorys den Ordner `Build/` selbst aus. `repository.yaml` enthält bis dahin eine Platzhalter-URL; ersetze `OWNER` nach dem Anlegen des GitHub-Repositories durch deinen GitHub-Benutzernamen. Keine Secrets oder CreatorOS-Nutzerdaten committen.
+GitHub Desktop verwendet weiterhin diesen Ordner `Build/` mit dem bereits verbundenen Remote `https://github.com/firebreakHD/CreOS.git`. Nach einem Build die Änderungen dort prüfen, committen und pushen. Keine Secrets oder CreatorOS-Nutzerdaten committen.

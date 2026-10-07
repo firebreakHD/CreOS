@@ -1,3 +1,4 @@
+import { rejectUntrustedRequest } from "@/lib/request-guard";
 import { NextResponse } from "next/server";
 import { emitHomeAssistantEvent } from "@/lib/home-assistant";
 import { updateState } from "@/lib/store";
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const untrusted = rejectUntrustedRequest(request); if (untrusted) return untrusted;
   let minutes = 25;
   try { const body = await request.json(); if (Number.isFinite(body.minutes)) minutes = Math.max(1, Math.min(60, Math.round(body.minutes))); } catch {}
   const { state, result } = await updateState((current) => {

@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { ArrowDownLeft, ArrowLeft, ArrowRight, AudioLines, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Command, FileText, FolderOpen, Home, Inbox, LayoutGrid, Menu, MoreHorizontal, Pause, Play, Plus, RotateCcw, Settings2, Sparkles, Square, Timer, X } from "lucide-react";
-import type { CreatorState, Idea, Project, ScriptSection, Session } from "@/lib/model";
+import { initialIntegrations, type CreatorState, type Idea, type Project, type ScriptSection, type Session } from "@/lib/model";
+import BrainScreen from "@/components/brain-screen";
+import IntegrationsScreen from "@/components/integrations-screen";
+import AiPanel from "@/components/ai-panel";
+import { MediaLibrary, MediaPanel } from "@/components/media-panel";
+import { ContentEditor, PlanningScreen, TaskPanel } from "@/components/project-tools";
 
-type Screen = "today" | "projects" | "project" | "ideas" | "kanban" | "script" | "settings" | "focus" | "session-end";
+type Screen = "today" | "projects" | "project" | "ideas" | "kanban" | "script" | "settings" | "brain" | "integrations" | "media" | "planning" | "focus" | "session-end";
 type SpeechResult = { transcript: string };
 type SpeechRecognitionLike = {
   lang: string;
@@ -61,6 +66,7 @@ export default function CreatorApp() {
   const [screen, setScreen] = useState<Screen>("today");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [quickCapture, setQuickCapture] = useState(false);
+  const [createPipeline, setCreatePipeline] = useState<Project["pipeline"] | null>(null);
   const [toast, setToast] = useState("");
   const [online, setOnline] = useState(true);
   const [clock, setClock] = useState(Date.now());
@@ -78,7 +84,7 @@ export default function CreatorApp() {
 
   const applyState = useCallback((next: CreatorState) => {
     const pending = stateRef.current?.ideas.filter((idea) => idea.pending) || [];
-    const merged = { ...next, ideas: [...next.ideas, ...pending.filter((idea) => !next.ideas.some((saved) => saved.id === idea.id))] };
+    const merged = { ...next, tasks: next.tasks || [], planning: next.planning || [], media: next.media || [], integrations: next.integrations || initialIntegrations(), actionProposals: next.actionProposals || [], brain: next.brain || { entries: [], revision: 0, updatedAt: null }, ideas: [...next.ideas, ...pending.filter((idea) => !next.ideas.some((saved) => saved.id === idea.id))] };
     stateRef.current = merged;
     setData(merged);
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(merged)); } catch {}
@@ -88,7 +94,7 @@ export default function CreatorApp() {
   const notify = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 2600);
+    toastTimer.current = setTimeout(() => setToast(""), 4500);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -161,6 +167,7 @@ export default function CreatorApp() {
   const go = (next: Screen) => {
     setScreen(next);
     setQuickCapture(false);
+    setCreatePipeline(null);
     setContextOpen(false);
     if (next !== "focus" && next !== "session-end") history.replaceState(null, "", window.location.pathname);
     else history.replaceState(null, "", `${window.location.pathname}?mode=focus`);
@@ -169,12 +176,12 @@ export default function CreatorApp() {
   const mutate = async (url: string, method: "POST" | "PATCH", body: unknown) => {
     setBusy(true);
     try {
-      const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
       const payload = await responseState(response) as { state?: CreatorState; project?: Project; session?: Session; result?: { convertedProjectId?: string } };
       if (payload.state) applyState(payload.state);
       return payload;
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Verbindung unterbrochen.");
+      notify(error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") ? "Der Server antwortet gerade nicht. Deine Eingabe bleibt erhalten." : error instanceof Error ? error.message : "Verbindung unterbrochen.");
       return null;
     } finally { setBusy(false); }
   };
@@ -186,28 +193,29 @@ export default function CreatorApp() {
 
   const saveIdea = async (text: string, projectId?: string) => {
     const idea: Idea = { id: crypto.randomUUID(), text: text.trim(), projectId: projectId || null, createdAt: new Date().toISOString(), pending: !navigator.onLine };
-    if (!idea.text) return;
+    if (!idea.text) return false;
     if (!navigator.onLine) {
       const next = stateRef.current;
       if (next) applyState({ ...next, ideas: [idea, ...next.ideas] });
       setOnline(false);
       notify("Offline gespeichert · wird beim Verbinden synchronisiert.");
-      return;
+      return true;
     }
     const result = await mutate("/api/ideas", "POST", { id: idea.id, text: idea.text, projectId: idea.projectId });
     if (result) notify("Gespeichert.");
+    return Boolean(result);
   };
 
   const updateProject = async (projectId: string, fields: Partial<Project> & { active?: boolean }) => {
     const result = await mutate("/api/projects", "PATCH", { id: projectId, ...fields });
     if (result) notify("Projekt aktualisiert.");
+    return Boolean(result);
   };
 
-  const createProject = async () => {
-    const title = window.prompt("Wie soll dein Projekt heißen?");
-    if (!title?.trim()) return;
-    const result = await mutate("/api/projects", "POST", { title: title.trim() });
+  const createProject = async (title: string, pipeline: Project["pipeline"]) => {
+    const result = await mutate("/api/projects", "POST", { title: title.trim(), pipeline });
     if (result?.project) { setSelectedProjectId(result.project.id); go("project"); notify("Projekt ist bereit. Leg deinen ersten kleinen Schritt fest."); }
+    return Boolean(result?.project);
   };
 
   const finishSession = async (nextAction: string) => {
@@ -226,20 +234,23 @@ export default function CreatorApp() {
   };
 
   const nav = (target: Screen) => {
-    if (target === "project") setSelectedProjectId(data?.activeProjectId || "");
     go(target);
   };
 
   if (!data) return <div className="boot-screen"><div className="brand-mark">▶</div><p>Dein nächster Schritt wird bereitgestellt …</p></div>;
 
-  const onQuickCaptureSave = (text: string, projectId?: string) => { void saveIdea(text, projectId); setQuickCapture(false); };
-  const headerLabel = ({ today: "Heute", projects: "Projekte", project: project?.title || "Projekt", ideas: "Ideen", kanban: "Content Pipeline", script: "Skript", settings: "Mehr", focus: "Fokus", "session-end": "Session abschließen" } as Record<Screen, string>)[screen];
+  const onQuickCaptureSave = async (text: string, projectId?: string) => {
+    const saved = await saveIdea(text, projectId);
+    if (saved) setQuickCapture(false);
+    return saved;
+  };
+  const headerLabel = ({ today: "Heute", projects: "Projekte", project: project?.title || "Projekt", ideas: "Ideen", kanban: "Content Pipeline", script: "Skript", settings: "Mehr", brain: "Brain", integrations: "Integrationen", media: "Medien", planning: "Planung", focus: "Fokus", "session-end": "Session abschließen" } as Record<Screen, string>)[screen];
 
   return <>
     {screen !== "focus" && screen !== "session-end" ? <div className="app-frame">
       <aside className="desktop-rail">
         <button className="brand-lockup" onClick={() => nav("today")} aria-label="CreatorOS · Heute"><span className="brand-symbol">▶</span><span>CreatorOS</span></button>
-        <div className="workspace-label"><span className="workspace-dot">M</span><span>Marcel Studio</span><ChevronDown size={14}/></div>
+        <button className="workspace-label" onClick={() => nav("settings")} title="Workspace-Einstellungen"><span className="workspace-dot">M</span><span>Marcel Studio</span><Settings2 size={18}/></button>
         <nav className="primary-nav" aria-label="Hauptnavigation">
           <div className="nav-caption">DEIN NÄCHSTER SCHRITT</div>
           <NavButton icon={<Home/>} label="Heute" active={screen === "today"} onClick={() => nav("today")}/>
@@ -247,6 +258,8 @@ export default function CreatorApp() {
           <NavButton icon={<Inbox/>} label="Ideen-Inbox" active={screen === "ideas"} onClick={() => nav("ideas")} count={data.ideas.filter((idea) => !idea.pending).length}/>
           <div className="nav-caption nav-caption-spaced">PRODUZIEREN</div>
           <NavButton icon={<LayoutGrid/>} label="Content Pipeline" active={screen === "kanban"} onClick={() => nav("kanban")}/>
+          <NavButton icon={<Sparkles/>} label="Brain" active={screen === "brain"} onClick={() => nav("brain")}/>
+          {(data.media.length > 0 || data.integrations.nas.enabled) && <NavButton icon={<BookOpen/>} label="Medien" active={screen === "media"} onClick={() => nav("media")}/>}
         </nav>
         <div className="rail-bottom">
           <button className="rail-secondary" onClick={() => nav("settings")}><Settings2 size={17}/>Einstellungen</button>
@@ -257,20 +270,24 @@ export default function CreatorApp() {
       <main className="main-shell">
         <header className="topbar"><div className="topbar-context"><span className="context-root">CreatorOS</span><ChevronRight size={14}/><b>{headerLabel}</b></div><div className="topbar-actions"><div className={`sync-status ${online ? "" : "offline"}`}><span className="connection-dot"/>{online ? "Synchronisiert" : "Offline"}</div>{installPrompt && <button className="install-button" onClick={async () => { await installPrompt.prompt(); setInstallPrompt(null); }}>Installieren</button>}<button className="top-quick" onClick={() => setQuickCapture(true)}><Plus size={16}/> Idee festhalten</button></div></header>
         <div className="screen-stage">
-          {screen === "today" && <TodayScreen data={data} project={focusProject} session={session} clock={clock} busy={busy} onStart={() => void startSession()} onResume={() => session ? go("focus") : void startSession()} onChooseProject={(id) => void updateProject(id, { active: true })} onEditAction={(nextAction) => focusProject && void updateProject(focusProject.id, { nextAction })} onOpenProjects={() => nav("projects")} onCapture={() => setQuickCapture(true)} onIdeas={() => nav("ideas")} onProject={(id) => { setSelectedProjectId(id); nav("project"); }} />}
-          {screen === "projects" && <ProjectsScreen data={data} onCreate={() => void createProject()} onOpen={(id) => { setSelectedProjectId(id); nav("project"); }} onStart={(id) => void startSession(id)} />}
-          {screen === "project" && project && <ProjectScreen project={project} session={session} onBack={() => nav("projects")} onStart={() => void startSession(project.id)} onNextAction={(nextAction) => void updateProject(project.id, { nextAction })} onScript={() => nav("script")} onKanban={() => nav("kanban")} onContext={() => setContextOpen(!contextOpen)} contextOpen={contextOpen} onStatus={(pipeline) => void updateProject(project.id, { pipeline })} />}
+          {screen === "today" && <TodayScreen data={data} project={focusProject} session={session} clock={clock} busy={busy} onStart={() => void startSession()} onResume={() => session ? go("focus") : void startSession()} onChooseProject={(id) => void updateProject(id, { active: true })} onEditAction={(nextAction) => focusProject ? updateProject(focusProject.id, { nextAction }) : Promise.resolve(false)} onOpenProjects={() => nav("projects")} onCapture={() => setQuickCapture(true)} onIdeas={() => nav("ideas")} onProject={(id) => { setSelectedProjectId(id); nav("project"); }} />}
+          {screen === "projects" && <ProjectsScreen data={data} onCreate={() => setCreatePipeline("ideas")} onOpen={(id) => { setSelectedProjectId(id); nav("project"); }} onStart={(id) => void startSession(id)} />}
+          {screen === "project" && project && <ProjectScreen data={data} onState={applyState} project={project} session={session} onBack={() => nav("projects")} onStart={() => void startSession(project.id)} onNextAction={(nextAction) => updateProject(project.id, { nextAction })} onScript={() => nav("script")} onKanban={() => nav("kanban")} onContext={() => setContextOpen(!contextOpen)} contextOpen={contextOpen} onStatus={(pipeline) => void updateProject(project.id, { pipeline })} />}
           {screen === "ideas" && <IdeasScreen data={data} onCapture={() => setQuickCapture(true)} onConvert={(id) => void convertIdea(id)} onProject={(id) => { setSelectedProjectId(id); nav("project"); }} />}
-          {screen === "kanban" && <KanbanScreen data={data} mobileColumn={mobileColumn} setMobileColumn={setMobileColumn} onMove={(id, pipeline) => void updateProject(id, { pipeline })} onOpen={(id) => { setSelectedProjectId(id); nav("project"); }} />}
-          {screen === "script" && project && <ScriptScreen project={project} onBack={() => nav("project")} onSave={(scripts) => void updateProject(project.id, { scripts })} />}
-          {screen === "settings" && <SettingsScreen data={data} online={online} haState={haState} onBuildDay={(day) => void saveBuildDay(day)} onRestore={(state) => applyState(state)} onNotify={notify} />}
+          {screen === "kanban" && <KanbanScreen data={data} mobileColumn={mobileColumn} setMobileColumn={setMobileColumn} onCreate={(pipeline) => setCreatePipeline(pipeline)} onMove={(id, pipeline) => void updateProject(id, { pipeline })} onOpen={(id) => { setSelectedProjectId(id); nav("project"); }} />}
+          {screen === "script" && project && <ScriptScreen project={project} onBack={() => nav("project")} onSave={(scripts) => updateProject(project.id, { scripts })} />}
+          {screen === "settings" && <SettingsScreen onIntegrations={() => nav("integrations")} onMedia={() => nav("media")} onPlanning={() => nav("planning")} onBrain={() => nav("brain")} onKanban={() => nav("kanban")} data={data} online={online} haState={haState} onBuildDay={(day) => void saveBuildDay(day)} onRestore={(state) => applyState(state)} onNotify={notify} />}
+          {screen === "brain" && <BrainScreen data={data} onState={applyState} onNotify={notify}/>}
+          {screen === "integrations" && <IntegrationsScreen data={data} onState={applyState}/>}
+          {screen === "media" && <MediaLibrary data={data}/>}
+          {screen === "planning" && <PlanningScreen data={data} onState={applyState}/>}
         </div>
         <nav className="mobile-nav" aria-label="Mobile Navigation">
           <NavButton icon={<Home/>} label="Heute" active={screen === "today"} onClick={() => nav("today")}/>
           <NavButton icon={<FolderOpen/>} label="Projekte" active={screen === "projects" || screen === "project" || screen === "script"} onClick={() => nav("projects")}/>
           <button className="mobile-capture" aria-label="Idee festhalten" onClick={() => setQuickCapture(true)}><Plus size={24}/></button>
           <NavButton icon={<Inbox/>} label="Ideen" active={screen === "ideas"} onClick={() => nav("ideas")}/>
-          <NavButton icon={<Menu/>} label="Mehr" active={screen === "kanban" || screen === "settings"} onClick={() => nav(screen === "settings" ? "kanban" : "settings")}/>
+          <NavButton icon={<Menu/>} label="Mehr" active={["kanban","settings","brain","integrations","media","planning"].includes(screen)} onClick={() => nav("settings")}/>
         </nav>
       </main>
     </div> : <div className="focus-shell">
@@ -278,6 +295,7 @@ export default function CreatorApp() {
       {screen === "session-end" && focusProject && <SessionEndScreen project={focusProject} session={session} value={sessionNext} setValue={setSessionNext} busy={busy} onSave={() => void finishSession(sessionNext)} onSkip={() => void finishSession("")}/>}
     </div>}
     {quickCapture && <QuickCapture projects={data.projects} onClose={() => setQuickCapture(false)} onSave={onQuickCaptureSave} onNotify={notify}/>}
+    {createPipeline && <CreateProjectDialog pipeline={createPipeline} onClose={() => setCreatePipeline(null)} onSave={createProject}/>}
     <div className={`toast ${toast ? "toast-visible" : ""}`} role="status" aria-live="polite">{toast}</div>
   </>;
 
@@ -287,17 +305,8 @@ export default function CreatorApp() {
   }
 
   async function saveBuildDay(day: string) {
-    const current = stateRef.current;
-    if (!current) return;
     if (!navigator.onLine) { notify("Der Build-Tag kann offline nicht synchronisiert werden. Versuch es, sobald du wieder verbunden bist."); return; }
-    const next = { ...current, buildDay: day };
-    applyState(next);
-    try {
-      const response = await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ buildDay: day }) });
-      const payload = await responseState(response) as { state: CreatorState };
-      applyState(payload.state);
-      notify("Build-Tag gespeichert.");
-    } catch { notify("Build-Tag lokal gespeichert · wird später synchronisiert."); }
+    if (await mutate("/api/settings", "PATCH", { buildDay: day })) notify("Build-Tag gespeichert.");
   }
 }
 
@@ -309,7 +318,7 @@ function ScreenHeading({ eyebrow, title, detail, action }: { eyebrow?: string; t
   return <div className="screen-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{detail && <p>{detail}</p>}</div>{action}</div>;
 }
 
-function TodayScreen({ data, project, session, clock, busy, onStart, onResume, onChooseProject, onEditAction, onOpenProjects, onCapture, onIdeas, onProject }: { data: CreatorState; project: Project | null; session: Session | null; clock: number; busy: boolean; onStart: () => void; onResume: () => void; onChooseProject: (id: string) => void; onEditAction: (action: string) => void; onOpenProjects: () => void; onCapture: () => void; onIdeas: () => void; onProject: (id: string) => void }) {
+function TodayScreen({ data, project, session, clock, busy, onStart, onResume, onChooseProject, onEditAction, onOpenProjects, onCapture, onIdeas, onProject }: { data: CreatorState; project: Project | null; session: Session | null; clock: number; busy: boolean; onStart: () => void; onResume: () => void; onChooseProject: (id: string) => void; onEditAction: (action: string) => Promise<boolean>; onOpenProjects: () => void; onCapture: () => void; onIdeas: () => void; onProject: (id: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project?.nextAction || "");
   const [chooseOpen, setChooseOpen] = useState(false);
@@ -323,7 +332,7 @@ function TodayScreen({ data, project, session, clock, busy, onStart, onResume, o
     {project ? <div className="today-layout"><article className="resume-card">
       <div className="resume-overline"><span className="project-mark">{project.title.slice(0, 1).toUpperCase()}</span><span>{project.title}</span><span className="resume-separator">·</span><span className="resume-stage">{columns.find((column) => column.id === project.pipeline)?.label || "In Arbeit"}</span>{longPause && <span className="return-pill">Zuletzt geöffnet</span>}</div>
       <div className="action-block"><span className="action-label">DEIN NÄCHSTER SCHRITT</span>{editing ? <textarea className="action-editor" value={draft} onChange={(event) => setDraft(event.target.value)} autoFocus aria-label="Nächsten Schritt bearbeiten"/> : <h2>{project.nextAction || "Lege einen kleinen nächsten Schritt fest."}</h2>}
-        <div className="action-tools">{editing ? <><button className="button-primary" onClick={() => { onEditAction(draft); setEditing(false); }}>Speichern</button><button className="button-ghost" onClick={() => { setDraft(project.nextAction); setEditing(false); }}>Abbrechen</button></> : <button className="text-action" onClick={() => setEditing(true)}>Nächsten Schritt ändern</button>}</div>
+        <div className="action-tools">{editing ? <><button className="button-primary" disabled={busy} onClick={async () => { if (await onEditAction(draft)) setEditing(false); }}>{busy ? "Wird gespeichert …" : "Speichern"}</button><button className="button-ghost" disabled={busy} onClick={() => { setDraft(project.nextAction); setEditing(false); }}>Abbrechen</button></> : <button className="text-action" onClick={() => setEditing(true)}>Nächsten Schritt ändern</button>}</div>
       </div>
       <div className="resume-last"><Clock3 size={15}/><span>{session ? "Session läuft seit" : "Zuletzt weitergemacht"} {session ? formatTime(elapsedFor(session)) : lastSession?.endedAt ? localDate(lastSession.endedAt) : "Hier geht es weiter."}</span>{project.lastProgress && <><span className="bullet-separator">·</span><span>{project.lastProgress}</span></>}</div>
       <div className="resume-controls"><button className="start-button" onClick={session ? onResume : onStart} disabled={busy}><Play size={17} fill="currentColor"/>{session ? "WEITERMACHEN" : "10 MINUTEN STARTEN"}<ArrowRight size={17}/></button><button className="project-switch" onClick={() => setChooseOpen(!chooseOpen)}>Anderes Projekt wählen <ChevronDown size={15}/></button></div>
@@ -340,23 +349,28 @@ function ProjectsScreen({ data, onCreate, onOpen, onStart }: { data: CreatorStat
   const active = data.projects.filter((project) => project.status === "active");
   const paused = data.projects.filter((project) => project.status === "paused");
   return <section><ScreenHeading eyebrow="DEIN ARBEITSRAUM" title="Projekte" detail="Wähle ein Projekt oder mach mit dem zuletzt aktiven weiter." action={<button className="button-secondary" onClick={onCreate}><Plus size={16}/> Projekt anlegen</button>}/>
-    <div className="project-list-full">{active.map((project, index) => <article className={`project-row ${index === 0 ? "project-row-active" : ""}`} key={project.id}><button className="project-row-main" onClick={() => onOpen(project.id)}><span className="project-row-mark">{project.title.slice(0, 1)}</span><span className="project-row-copy"><b>{project.title}</b><small>{project.nextAction}</small><span className="project-row-meta">{columns.find((column) => column.id === project.pipeline)?.label} · {project.lastProgress || "Noch kein Fortschritt notiert"}</span></span><ChevronRight size={17}/></button><button className="project-row-start" onClick={() => onStart(project.id)}><Play size={15} fill="currentColor"/> Starten</button></article>)}
+    <div className="project-list-full">{active.map((project, index) => <article className={`project-row ${index === 0 ? "project-row-active" : ""}`} key={project.id}><button className="project-row-main" onClick={() => onOpen(project.id)}><span className="project-row-mark">{project.title.slice(0, 1)}</span><span className="project-row-copy"><b>{project.title}</b><small>{project.nextAction}</small><span className="project-row-meta">{columns.find((column) => column.id === project.pipeline)?.label} · {project.lastProgress || "Noch kein Fortschritt notiert"}</span></span><ChevronRight size={17}/></button><button className="project-row-start" aria-label={`Session für ${project.title} starten`} onClick={() => onStart(project.id)}><Play size={15} fill="currentColor"/> Starten</button></article>)}
     {paused.length > 0 && <><div className="subsection-title">PAUSIERT</div>{paused.map((project) => <button className="project-row paused-row" key={project.id} onClick={() => onOpen(project.id)}><span className="project-row-mark">{project.title.slice(0, 1)}</span><span className="project-row-copy"><b>{project.title}</b><small>{project.nextAction}</small></span><ChevronRight size={17}/></button>)}</>}
     {active.length === 0 && paused.length === 0 && <div className="empty-state"><FolderOpen size={22}/><b>Noch kein Projekt hier.</b><span>Starte mit dem kleinsten Schritt, den du schon kennst.</span><button className="button-primary" onClick={onCreate}>Projekt anlegen</button></div>}</div>
   </section>;
 }
 
-function ProjectScreen({ project, session, onBack, onStart, onNextAction, onScript, onKanban, onContext, contextOpen, onStatus }: { project: Project; session: Session | null; onBack: () => void; onStart: () => void; onNextAction: (value: string) => void; onScript: () => void; onKanban: () => void; onContext: () => void; contextOpen: boolean; onStatus: (pipeline: Project["pipeline"]) => void }) {
+function ProjectScreen({ data, onState, project, session, onBack, onStart, onNextAction, onScript, onKanban, onContext, contextOpen, onStatus }: { data: CreatorState; onState: (state: CreatorState) => void; project: Project; session: Session | null; onBack: () => void; onStart: () => void; onNextAction: (value: string) => Promise<boolean>; onScript: () => void; onKanban: () => void; onContext: () => void; contextOpen: boolean; onStatus: (pipeline: Project["pipeline"]) => void }) {
   const [edit, setEdit] = useState(false);
+  const [tab, setTab] = useState<"overview" | "tasks" | "content" | "ai">("overview");
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(project.nextAction);
   useEffect(() => { setDraft(project.nextAction); }, [project.id, project.nextAction]);
   return <section className="project-workspace"><button className="back-link" onClick={onBack}><ArrowLeft size={15}/> Projekte</button><div className="project-title-block"><div><div className="eyebrow">PROJEKT · {columns.find((column) => column.id === project.pipeline)?.label}</div><h1>{project.title}</h1><p>{project.summary}</p></div><button className="button-primary" onClick={onStart}><Play size={16} fill="currentColor"/>{session ? "Session fortsetzen" : "10 Minuten starten"}</button></div>
-    <div className="project-tabs"><button className="project-tab active">Überblick</button><button className="project-tab" onClick={onScript}><FileText size={15}/> Skript</button><button className="project-tab" onClick={onContext}><BookOpen size={15}/> Material <span>{project.materials.length}</span></button><button className="project-tab" onClick={onKanban}><LayoutGrid size={15}/> Pipeline</button></div>
-    <div className="project-content-grid"><div className="project-content-main"><article className="next-action-panel"><div className="panel-title"><span className="action-label">NÄCHSTE HANDLUNG</span><button className="icon-quiet" aria-label="Bearbeiten" onClick={() => setEdit(!edit)}><Settings2 size={16}/></button></div>{edit ? <><textarea className="action-editor" value={draft} onChange={(event) => setDraft(event.target.value)}/><button className="button-primary compact" onClick={() => { onNextAction(draft); setEdit(false); }}>Speichern</button></> : <h2>{project.nextAction}</h2>}<div className="panel-actions"><button className="button-primary" onClick={onStart}><Play size={15} fill="currentColor"/> Weitermachen</button><button className="button-ghost" onClick={() => { setDraft(project.nextAction); setEdit(true); }}>Nächsten Schritt ändern</button></div></article>
+    <div className="project-tabs"><button className={`project-tab ${tab === "overview" ? "active" : ""}`} aria-current={tab === "overview" ? "page" : undefined} onClick={() => { setTab("overview"); setEdit(false); if (contextOpen) onContext(); }}>Überblick</button><button className={`project-tab ${tab === "tasks" ? "active" : ""}`} onClick={() => setTab("tasks")}>Aufgaben</button><button className="project-tab" onClick={onScript}><FileText size={15}/> Skript</button><button className="project-tab" onClick={() => { setTab("overview"); onContext(); }}><BookOpen size={15}/> Material <span>{project.materials.length + data.media.filter((media) => media.links.some((link) => link.entityType === "project" && link.entityId === project.id)).length}</span></button><button className={`project-tab ${tab === "content" ? "active" : ""}`} onClick={() => setTab("content")}>Content</button><button className="project-tab" onClick={onKanban}><LayoutGrid size={15}/> Pipeline</button>{data.integrations.ai.enabled && <button className={`project-tab ${tab === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}><Sparkles size={15}/> AI</button>}</div>
+    {tab === "tasks" && <TaskPanel data={data} project={project} onState={onState}/>}
+    {tab === "content" && <ContentEditor key={project.id} project={project} onState={onState}/>}
+    {tab === "ai" && <AiPanel data={data} projectId={project.id} onState={onState}/>}
+    {tab === "overview" && <div className={`project-content-grid ${contextOpen ? "context-open" : ""}`}><div className="project-content-main"><article className="next-action-panel"><div className="panel-title"><span className="action-label">NÄCHSTE HANDLUNG</span><button className="icon-quiet" aria-label="Bearbeiten" disabled={saving} onClick={() => setEdit(!edit)}><Settings2 size={16}/></button></div>{edit ? <><textarea className="action-editor" value={draft} onChange={(event) => setDraft(event.target.value)}/><button className="button-primary compact" disabled={saving} onClick={async () => { setSaving(true); try { if (await onNextAction(draft)) setEdit(false); } finally { setSaving(false); } }}>{saving ? "Wird gespeichert …" : "Speichern"}</button></> : <h2>{project.nextAction}</h2>}<div className="panel-actions"><button className="button-primary" onClick={onStart}><Play size={15} fill="currentColor"/> Weitermachen</button><button className="button-ghost" onClick={() => { setDraft(project.nextAction); setEdit(true); }}>Nächsten Schritt ändern</button></div></article>
       <div className="project-summary-grid"><article className="detail-card"><span className="detail-icon"><FileText size={17}/></span><b>{project.scripts.length} Skript-Abschnitte</b><small>{project.scripts.filter((script) => script.done).length} abgeschlossen</small><button onClick={onScript}>Skript öffnen <ArrowRight size={13}/></button></article><article className="detail-card"><span className="detail-icon"><FolderOpen size={17}/></span><b>{project.materials.length} Materialdateien</b><small>Für dieses Projekt gesammelt</small><button onClick={onContext}>Material ansehen <ArrowRight size={13}/></button></article></div>
       <article className="last-progress-card"><span className="action-label">ZULETZT WEITERGEMACHT</span><p>{project.lastProgress || "Für diesen Abschnitt gibt es noch keinen gespeicherten Fortschritt."}</p><small>Dein Wiedereinstieg bleibt hier notiert.</small></article></div>
-      <aside className={`project-context ${contextOpen ? "context-open" : ""}`}><div className="context-heading"><div><span className="action-label">KONTEXT</span><h3>Damit du nicht suchen musst</h3></div><button className="icon-quiet" onClick={onContext} aria-label="Kontext schließen"><X size={16}/></button></div><div className="context-field"><label>Pipeline-Status</label><select value={project.pipeline} onChange={(event) => onStatus(event.target.value as Project["pipeline"])}>{columns.map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select></div><div className="context-field"><label>Was du zuletzt gemacht hast</label><p>{project.lastProgress || "Noch nichts notiert."}</p></div><div className="context-field"><label>Dein Material</label>{project.materials.length ? project.materials.map((item) => <div className="material-mini" key={item.id}><span><FileText size={14}/></span><div><b>{item.name}</b><small>{item.note}</small></div></div>) : <p>Material kann später ergänzt werden.</p>}</div></aside>
-    </div></section>;
+      <aside className={`project-context ${contextOpen ? "context-open" : ""}`}><div className="context-heading"><div><span className="action-label">KONTEXT</span><h3>Damit du nicht suchen musst</h3></div><button className="icon-quiet" onClick={onContext} aria-label="Kontext schließen"><X size={16}/></button></div><div className="context-field"><label>Pipeline-Status</label><select value={project.pipeline} onChange={(event) => onStatus(event.target.value as Project["pipeline"])}>{columns.map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select></div><div className="context-field"><label>Was du zuletzt gemacht hast</label><p>{project.lastProgress || "Noch nichts notiert."}</p></div><div className="context-field"><label>Dein Material</label>{project.materials.map((item) => <div className="material-mini" key={item.id}><span><FileText size={14}/></span><div><b>{item.name}</b><small>{item.note}</small></div></div>)}</div><MediaPanel data={data} entityType="project" entityId={project.id} onState={onState} compact/></aside>
+    </div>}</section>;
 }
 
 function IdeasScreen({ data, onCapture, onConvert, onProject }: { data: CreatorState; onCapture: () => void; onConvert: (id: string) => void; onProject: (id: string) => void }) {
@@ -366,28 +380,30 @@ function IdeasScreen({ data, onCapture, onConvert, onProject }: { data: CreatorS
   </section>;
 }
 
-function KanbanScreen({ data, mobileColumn, setMobileColumn, onMove, onOpen }: { data: CreatorState; mobileColumn: string; setMobileColumn: (id: string) => void; onMove: (projectId: string, column: Project["pipeline"]) => void; onOpen: (id: string) => void }) {
+function KanbanScreen({ data, mobileColumn, setMobileColumn, onCreate, onMove, onOpen }: { data: CreatorState; mobileColumn: string; setMobileColumn: (id: string) => void; onCreate: (pipeline: Project["pipeline"]) => void; onMove: (projectId: string, column: Project["pipeline"]) => void; onOpen: (id: string) => void }) {
   const [dragging, setDragging] = useState("");
   const shownColumns = columns;
   return <section><ScreenHeading eyebrow="PRODUKTIONSÜBERSICHT" title="Content Pipeline" detail="Dein Produktionsfluss. Auf dem Handy eine Spalte nach der anderen."/>
     <div className="mobile-column-select"><label htmlFor="pipeline-column">Spalte ansehen</label><select id="pipeline-column" value={mobileColumn} onChange={(event) => setMobileColumn(event.target.value)}>{columns.map((column) => <option key={column.id} value={column.id}>{column.label}</option>)}</select><ChevronDown size={16}/></div>
-    <div className="kanban-board">{shownColumns.map((column) => { const cards = data.projects.filter((item) => item.pipeline === column.id && item.status === "active"); return <section className={`kanban-column ${column.id === mobileColumn ? "mobile-column-active" : ""} ${dragging ? "column-drop-ready" : ""}`} key={column.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); if (id) onMove(id, column.id); setDragging(""); }}><div className="kanban-column-header"><span className={`kanban-dot ${column.id}`}/><b>{column.label}</b><span>{cards.length}</span><button aria-label={`Optionen für ${column.label}`}><MoreHorizontal size={15}/></button></div>{cards.map((card) => <article className={`kanban-card ${dragging === card.id ? "card-dragging" : ""}`} key={card.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", card.id); setDragging(card.id); }} onDragEnd={() => setDragging("")}><button className="kanban-open" onClick={() => onOpen(card.id)}><span className="kanban-card-label">{column.label.toLocaleUpperCase("de")}</span><b>{card.title}</b><small>{card.nextAction}</small><span className="kanban-card-bottom"><span>{card.scripts.length} Script-Abschnitte</span><ChevronRight size={14}/></span></button><label className="move-card">Verschieben <select aria-label={`${card.title} verschieben`} value={card.pipeline} onChange={(event) => onMove(card.id, event.target.value as Project["pipeline"])}>{columns.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></article>)}{cards.length === 0 && <div className="column-empty">Noch nichts hier.</div>}</section>; })}</div>
+    <div className="kanban-board">{shownColumns.map((column) => { const cards = data.projects.filter((item) => item.pipeline === column.id && item.status === "active"); return <section className={`kanban-column ${column.id === mobileColumn ? "mobile-column-active" : ""} ${dragging ? "column-drop-ready" : ""}`} key={column.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/plain"); if (id) onMove(id, column.id); setDragging(""); }}><div className="kanban-column-header"><span className={`kanban-dot ${column.id}`}/><b>{column.label}</b><span>{cards.length}</span><button aria-label={`Projekt in ${column.label} anlegen`} title="Projekt hier anlegen" onClick={() => onCreate(column.id)}><Plus size={19}/></button></div>{cards.map((card) => <article className={`kanban-card ${dragging === card.id ? "card-dragging" : ""}`} key={card.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", card.id); setDragging(card.id); }} onDragEnd={() => setDragging("")}><button className="kanban-open" onClick={() => onOpen(card.id)}><span className="kanban-card-label">{column.label.toLocaleUpperCase("de")}</span><b>{card.title}</b><small>{card.nextAction}</small><span className="kanban-card-bottom"><span>{card.scripts.length} Script-Abschnitte</span><ChevronRight size={14}/></span></button><label className="move-card">Verschieben <select aria-label={`${card.title} verschieben`} value={card.pipeline} onChange={(event) => onMove(card.id, event.target.value as Project["pipeline"])}>{columns.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label></article>)}{cards.length === 0 && <div className="column-empty">Noch nichts hier.</div>}</section>; })}</div>
   </section>;
 }
 
-function ScriptScreen({ project, onBack, onSave }: { project: Project; onBack: () => void; onSave: (scripts: ScriptSection[]) => void }) {
+function ScriptScreen({ project, onBack, onSave }: { project: Project; onBack: () => void; onSave: (scripts: ScriptSection[]) => Promise<boolean> }) {
   const [selected, setSelected] = useState(project.scripts[0]?.id || "");
   const [draft, setDraft] = useState<ScriptSection[]>(project.scripts);
   const [contextOpen, setContextOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const save = async () => { if (saving) return; setSaving(true); try { await onSave(draft); } finally { setSaving(false); } };
   const current = draft.find((item) => item.id === selected) || draft[0];
   useEffect(() => { setDraft(project.scripts); setSelected(project.scripts[0]?.id || ""); }, [project.id]);
   const update = (id: string, fields: Partial<ScriptSection>) => setDraft((items) => items.map((item) => item.id === id ? { ...item, ...fields } : item));
   const add = () => { const section = { id: crypto.randomUUID(), title: `Neuer Abschnitt ${draft.length + 1}`, body: "", done: false }; setDraft((items) => [...items, section]); setSelected(section.id); };
-  return <section><button className="back-link" onClick={onBack}><ArrowLeft size={15}/> {project.title}</button><ScreenHeading eyebrow="PROJEKT · SKRIPT" title="Gedanken, bereit für die Kamera." detail="Arbeite an einem Abschnitt. Der Rest bleibt aus dem Weg." action={<div className="screen-action-group"><button className="button-secondary" onClick={() => setContextOpen(!contextOpen)}><BookOpen size={15}/> Material</button><button className="button-primary" onClick={() => { onSave(draft); }}><Check size={15}/> Änderungen speichern</button></div>}/>
+  return <section><button className="back-link" onClick={onBack}><ArrowLeft size={15}/> {project.title}</button><ScreenHeading eyebrow="PROJEKT · SKRIPT" title="Gedanken, bereit für die Kamera." detail="Arbeite an einem Abschnitt. Der Rest bleibt aus dem Weg." action={<div className="screen-action-group"><button className="button-secondary" onClick={() => setContextOpen(!contextOpen)}><BookOpen size={15}/> Material</button><button className="button-primary" disabled={saving} onClick={() => void save()}><Check size={15}/> {saving ? "Wird gespeichert …" : "Änderungen speichern"}</button></div>}/>
     <div className="script-workspace"><aside className="script-outline"><div className="script-outline-head"><span className="action-label">STORY-STRUKTUR</span><span>{draft.filter((item) => item.done).length}/{draft.length}</span></div>{draft.map((item, index) => <button className={`script-section ${item.id === current?.id ? "script-section-active" : ""}`} key={item.id} onClick={() => setSelected(item.id)}><span className={`section-number ${item.done ? "section-done" : ""}`}>{item.done ? <Check size={13}/> : String(index + 1).padStart(2, "0")}</span><span><b>{item.title}</b><small>{item.done ? "Fertig" : "Noch offen"}</small></span></button>)}<button className="add-section" onClick={add}><Plus size={15}/> Abschnitt hinzufügen</button></aside>
       <article className="script-editor">{current ? <><div className="script-edit-top"><label className="action-label" htmlFor="script-title">ABSCHNITT</label><label className="script-done-toggle"><input type="checkbox" checked={current.done} onChange={(event) => update(current.id, { done: event.target.checked })}/> Fertig</label></div><input id="script-title" className="script-title-input" value={current.title} onChange={(event) => update(current.id, { title: event.target.value })}/><textarea className="script-body-input" value={current.body} onChange={(event) => update(current.id, { body: event.target.value })} placeholder="Was soll hier passieren? Stichpunkte reichen."/><div className="script-context-hint"><CircleHelp size={15}/> Erst die Idee festhalten. Formulieren kannst du später.</div></> : <div className="empty-script"><BookOpen size={23}/><b>Noch keine Abschnitte.</b><span>Mach den ersten Gedanken greifbar.</span><button className="button-primary" onClick={add}><Plus size={14}/> Ersten Abschnitt anlegen</button></div>}</article>
-      <aside className={`script-context ${contextOpen ? "context-open" : ""}`}><div className="context-heading"><div><span className="action-label">KONTEXT</span><h3>Material für diesen Abschnitt</h3></div><button className="icon-quiet" onClick={() => setContextOpen(!contextOpen)} aria-label="Kontext schließen"><X size={16}/></button></div>{project.materials.map((item) => <div className="material-mini" key={item.id}><span><FileText size={14}/></span><div><b>{item.name}</b><small>{item.note}</small></div></div>)}<button className="text-action" onClick={() => setContextOpen(!contextOpen)}><Plus size={14}/> Material auswählen</button></aside></div>
-      <div className="script-mobile-save"><button className="button-primary" onClick={() => onSave(draft)}><Check size={15}/> Änderungen speichern</button></div>
+      <aside className={`script-context ${contextOpen ? "context-open" : ""}`}><div className="context-heading"><div><span className="action-label">KONTEXT</span><h3>Material für diesen Abschnitt</h3></div><button className="icon-quiet" onClick={() => setContextOpen(false)} aria-label="Kontext schließen"><X size={16}/></button></div>{project.materials.map((item) => <div className="material-mini" key={item.id}><span><FileText size={14}/></span><div><b>{item.name}</b><small>{item.note}</small></div></div>)}<button className="text-action" onClick={() => setContextOpen(false)}><ArrowLeft size={14}/> Zurück zum Skript</button></aside></div>
+      <div className="script-mobile-save"><button className="button-primary" disabled={saving} onClick={() => void save()}><Check size={15}/> {saving ? "Wird gespeichert …" : "Änderungen speichern"}</button></div>
     </section>;
 }
 
@@ -403,14 +419,38 @@ function SessionEndScreen({ project, session, value, setValue, busy, onSave, onS
   return <main className="session-end-view"><div className="session-end-brand"><span className="brand-symbol">▶</span> CreatorOS</div><section className="session-end-card"><span className="session-check"><Check size={20}/></span><div className="eyebrow">SESSION ABSCHLIESSEN</div><h1>{project.title}</h1><p className="end-duration"><Clock3 size={15}/>{session ? `${Math.max(1, Math.floor(elapsedFor(session) / 60))} Minuten Fokus` : "Dein Schritt für heute ist getan."}</p><label htmlFor="next-after">Was ist beim nächsten Mal dran?</label><textarea id="next-after" value={value} onChange={(event) => setValue(event.target.value)} placeholder="z. B. Den Cut nach der Fundstelle setzen"/><button className="button-primary end-save" onClick={onSave} disabled={busy}><Check size={16}/> Nächsten Schritt speichern</button><button className="text-action end-skip" onClick={onSkip} disabled={busy}>Fertig ohne Änderung</button></section><p className="end-soft-note">Du hast die Arbeit ein Stück weitergebracht. Hier wartet dein Wiedereinstieg.</p></main>;
 }
 
-function QuickCapture({ projects, onClose, onSave, onNotify }: { projects: Project[]; onClose: () => void; onSave: (text: string, projectId?: string) => void; onNotify: (message: string) => void }) {
+function CreateProjectDialog({ pipeline, onClose, onSave }: { pipeline: Project["pipeline"]; onClose: () => void; onSave: (title: string, pipeline: Project["pipeline"]) => Promise<boolean> }) {
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { input.current?.focus(); }, []);
+  const submit = async () => {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    try { await onSave(title, pipeline); } finally { setSaving(false); }
+  };
+  return <div className="capture-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <section className="capture-dialog project-create-dialog" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
+      <div className="capture-top"><div><div className="eyebrow">EIN KLEINER ANFANG</div><h2 id="project-create-title">Wie heißt dein Projekt?</h2></div><button className="capture-close" onClick={onClose} disabled={saving} aria-label="Schließen"><X size={20}/></button></div>
+      <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <label htmlFor="project-name">Projektname</label><input ref={input} id="project-name" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} placeholder="z. B. LEGO – Oktober Comeback" onKeyDown={(event) => { if (event.key === "Escape" && !saving) onClose(); }} required/>
+        <p>Startet in „{columns.find((column) => column.id === pipeline)?.label}“. Den nächsten Schritt legst du danach fest.</p>
+        <div className="capture-footer"><button type="button" className="button-ghost" onClick={onClose} disabled={saving}>Abbrechen</button><button type="submit" className="button-primary" disabled={!title.trim() || saving}>{saving ? "Wird angelegt …" : "Projekt anlegen"}<ArrowRight size={17}/></button></div>
+      </form>
+    </section>
+  </div>;
+}
+
+function QuickCapture({ projects, onClose, onSave, onNotify }: { projects: Project[]; onClose: () => void; onSave: (text: string, projectId?: string) => Promise<boolean>; onNotify: (message: string) => void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [projectId, setProjectId] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   useEffect(() => { input.current?.focus(); return () => recognition.current?.stop(); }, []);
   const speak = () => {
+    if (listening) { recognition.current?.stop(); setListening(false); return; }
     const browser = window as unknown as { SpeechRecognition?: new() => SpeechRecognitionLike; webkitSpeechRecognition?: new() => SpeechRecognitionLike };
     const SpeechRecognition = browser.SpeechRecognition || browser.webkitSpeechRecognition;
     if (!SpeechRecognition) { onNotify("Spracheingabe ist in diesem Browser nicht verfügbar. Du kannst die Idee eintippen."); return; }
@@ -424,11 +464,15 @@ function QuickCapture({ projects, onClose, onSave, onNotify }: { projects: Proje
     setListening(true);
     try { instance.start(); } catch { setListening(false); onNotify("Die Mikrofonfreigabe ist noch nicht verfügbar."); }
   };
-  const submit = () => { if (!text.trim()) { input.current?.focus(); return; } onSave(text.trim(), projectId || undefined); setText(""); };
-  return <div className="capture-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="capture-dialog" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div className="capture-top"><div><div className="eyebrow">SCHNELL FESTHALTEN</div><h2 id="capture-title">Was ist dir gerade eingefallen?</h2></div><button className="capture-close" onClick={onClose} aria-label="Schließen"><X size={19}/></button></div><textarea ref={input} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit(); if (event.key === "Escape") onClose(); }} placeholder="Ein Satz reicht. Sortieren kannst du später." rows={4}/><div className="capture-options"><button className={`voice-button ${listening ? "voice-listening" : ""}`} onClick={speak}><AudioLines size={16}/>{listening ? "Höre zu …" : "Sprechen"}</button><label className="capture-project"><span>Projekt (optional)</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Später entscheiden</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.title}</option>)}</select></label></div><div className="capture-footer"><span>Landet in deiner Ideen-Inbox</span><button className="button-primary capture-save" onClick={submit} disabled={!text.trim()}><Check size={16}/> Speichern</button></div></section></div>;
+  const submit = async () => {
+    if (!text.trim() || saving) { input.current?.focus(); return; }
+    setSaving(true);
+    try { if (await onSave(text.trim(), projectId || undefined)) setText(""); } finally { setSaving(false); }
+  };
+  return <div className="capture-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="capture-dialog" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div className="capture-top"><div><div className="eyebrow">SCHNELL FESTHALTEN</div><h2 id="capture-title">Was ist dir gerade eingefallen?</h2></div><button className="capture-close" onClick={onClose} disabled={saving} aria-label="Schließen"><X size={19}/></button></div><textarea ref={input} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit(); if (event.key === "Escape" && !saving) onClose(); }} placeholder="Ein Satz reicht. Sortieren kannst du später." rows={4}/><div className="capture-options"><button className={`voice-button ${listening ? "voice-listening" : ""}`} onClick={speak}><AudioLines size={16}/>{listening ? "Höre zu …" : "Sprechen"}</button><label className="capture-project"><span>Projekt (optional)</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Später entscheiden</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.title}</option>)}</select></label></div><div className="capture-footer"><span>Landet in deiner Ideen-Inbox</span><button className="button-primary capture-save" onClick={() => void submit()} disabled={!text.trim() || saving}><Check size={16}/> {saving ? "Wird gespeichert …" : "Speichern"}</button></div></section></div>;
 }
 
-function SettingsScreen({ data, online, haState, onBuildDay, onRestore, onNotify }: { data: CreatorState; online: boolean; haState: string; onBuildDay: (day: string) => void; onRestore: (state: CreatorState) => void; onNotify: (message: string) => void }) {
+function SettingsScreen({ data, online, haState, onBuildDay, onRestore, onNotify, onKanban, onBrain, onIntegrations, onMedia, onPlanning }: { onIntegrations: () => void; onMedia: () => void; onPlanning: () => void; onBrain: () => void; onKanban: () => void; data: CreatorState; online: boolean; haState: string; onBuildDay: (day: string) => void; onRestore: (state: CreatorState) => void; onNotify: (message: string) => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const restore = async (file?: File) => {
     if (!file) return;
@@ -441,7 +485,8 @@ function SettingsScreen({ data, online, haState, onBuildDay, onRestore, onNotify
     if (fileInput.current) fileInput.current.value = "";
   };
   return <section><ScreenHeading eyebrow="DEIN WORKSPACE" title="Mehr Ruhe, weniger Pflege." detail="CreatorOS bleibt einfach und gehört dir."/>
-    <div className="settings-list"><article className="settings-card"><div className="settings-card-icon"><Clock3 size={17}/></div><div className="settings-copy"><b>Dein Build Day</b><small>CreatorOS zeigt dir dann deinen vorbereiteten nächsten Schritt.</small></div><select value={data.buildDay} onChange={(event) => onBuildDay(event.target.value)}>{["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"].map((day) => <option key={day}>{day}</option>)}</select></article>
+    <div className="settings-shortcuts"><button className="button-secondary" onClick={onIntegrations}><Settings2 size={18}/> Integrationen</button><button className="button-secondary" onClick={onMedia}><BookOpen size={18}/> Medien</button><button className="button-secondary" onClick={onPlanning}><Clock3 size={18}/> Planung</button></div>
+    <div className="settings-list"><button className="button-secondary settings-pipeline" onClick={onKanban}><LayoutGrid size={19}/> Content Pipeline öffnen <ArrowRight size={17}/></button><button className="button-secondary settings-pipeline" onClick={onBrain}><Sparkles size={19}/> Brain & KI-Kontext <ArrowRight size={17}/></button><article className="settings-card"><div className="settings-card-icon"><Clock3 size={17}/></div><div className="settings-copy"><b>Dein Build Day</b><small>CreatorOS zeigt dir dann deinen vorbereiteten nächsten Schritt.</small></div><select value={data.buildDay} onChange={(event) => onBuildDay(event.target.value)}>{["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"].map((day) => <option key={day}>{day}</option>)}</select></article>
       <article className="settings-card"><div className="settings-card-icon"><ArrowDownLeft size={17}/></div><div className="settings-copy"><b>Deine Daten</b><small>Projekte, Ideen und Sessions liegen gemeinsam im CreatorOS-Datenordner.</small></div><a className="button-secondary" href="/api/backup"><FileText size={15}/> Sicherung herunterladen</a></article>
       <article className="settings-card"><div className="settings-card-icon"><RotateCcw size={17}/></div><div className="settings-copy"><b>Sicherung wiederherstellen</b><small>Eine CreatorOS-JSON-Sicherung zurückspielen.</small></div><input ref={fileInput} type="file" accept="application/json,.json" className="visually-hidden" onChange={(event) => void restore(event.target.files?.[0])}/><button className="button-secondary" onClick={() => fileInput.current?.click()}>Datei wählen</button></article>
       <article className="settings-card"><div className="settings-card-icon"><Sparkles size={17}/></div><div className="settings-copy"><b>Home Assistant</b><small>{haState === "connected" ? "CreatorOS kann HA-Ereignisse auslösen." : "Optional · CreatorOS funktioniert auch ohne Home Assistant."}</small></div><span className={`service-status ${haState === "connected" ? "service-ready" : ""}`}><i/>{haState === "connected" ? "Verbunden" : online ? "Nicht eingerichtet" : "Offline"}</span></article>

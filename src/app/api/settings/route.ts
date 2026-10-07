@@ -1,3 +1,4 @@
+import { rejectUntrustedRequest } from "@/lib/request-guard";
 import { NextResponse } from "next/server";
 import { updateState } from "@/lib/store";
 
@@ -5,6 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request) {
+  const untrusted = rejectUntrustedRequest(request); if (untrusted) return untrusted;
   let body: unknown;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Ungültige JSON-Daten." }, { status: 400 }); }
   const buildDay = (body as { buildDay?: unknown })?.buildDay;
