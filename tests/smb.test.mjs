@@ -5,17 +5,19 @@ import path from "node:path";
 import os from "node:os";
 import { SmbStorageProvider } from "@/lib/smb-storage";
 import { validateNas } from "@/lib/storage";
-import { smbExplorerPath } from "../src/lib/storage-paths.ts";
+import { projectMediaRoot, smbExplorerPath } from "../src/lib/storage-paths.ts";
 import { configureIntegration,disconnectIntegration } from "@/lib/integrations";
 
 test("SMB ordinary share paths, bounded streams and file operations use the configured root",async () => {
   const config=validateNas({protocol:"smb",host:"192.168.1.20",port:445,share:"Medien",baseFolder:"CreatorOS",username:"creator",domain:"NAS",encrypt:true}); const calls=[];
-  const provider=new SmbStorageProvider(config,"test-only",async (command,body)=>{calls.push(command); if(body) assert.equal(await new Response(body).text(),"sample");return {metadata:{ok:true,length:3,status:206,contentRange:"bytes 1-3/6"},body:new Blob(["amp"]).stream()};});
+  const provider=new SmbStorageProvider(config,"test-only",async (command,body)=>{calls.push(command); if(body) assert.equal(await new Response(body).text(),"sample");return {metadata:{ok:true,length:3,status:206,contentRange:"bytes 1-3/6",...(command.operation==="list"?{entries:[{name:"CapCut",directory:true,size:0},{name:"clip.mp4",directory:false,size:2048}]}:{})},body:new Blob(["amp"]).stream()};});
   assert.equal(smbExplorerPath(config,"Media/Projects/LEGO/Video/clip.mp4"),"\\\\192.168.1.20\\Medien\\CreatorOS\\Media\\Projects\\LEGO\\Video\\clip.mp4");
   await provider.test(); await provider.storeFile("Media/Projects/LEGO/clip.txt",new Blob(["sample"]).stream(),6,"text/plain");
   const file=await provider.getFile("Media/Projects/LEGO/clip.txt","bytes=1-3");assert.equal(await new Response(file.body).text(),"amp");assert.equal(file.contentRange,"bytes 1-3/6");
   await provider.moveFile("Media/Projects/LEGO/clip.txt","Media/Projects/LEGO/renamed.txt"); await provider.deleteFile("Media/Projects/LEGO/renamed.txt");
-  assert.deepEqual(calls.map((call)=>call.operation),["test","put","get","move","delete"]);assert.ok(calls.every((call)=>call.config.share==="Medien"));
+  assert.deepEqual(await provider.listFolder("Media/Projects/LEGO"),[{name:"CapCut",directory:true,size:0},{name:"clip.mp4",directory:false,size:2048}]); await provider.createFolder("Media/Projects/LEGO/CapCut");
+  assert.deepEqual(calls.map((call)=>call.operation),["test","put","get","move","delete","list","mkdir"]);assert.ok(calls.every((call)=>call.config.share==="Medien"));
+  const project={id:"project-123456",title:"Vorheriger Name",storageFolder:"Vorheriger Name_123456"}; assert.equal(projectMediaRoot({...project,title:"Nach dem Umbenennen"}),"Media/Projects/Vorheriger Name_123456");
   await assert.rejects(()=>provider.getFile("../../outside")); await assert.rejects(()=>provider.getFile("clip.txt","bytes=1-2,3-4"));
   for(const share of ["../outside","folder/sub", "x\\y","C:","bad?"])assert.throws(()=>validateNas({...config,share}));
 });

@@ -3,6 +3,7 @@ import path from "node:path";
 import { initialAssistantLayout, initialIntegrations, initialState, now, type CreatorState } from "@/lib/model";
 import { readBrain } from "@/lib/brain";
 import { migrateNextTasks } from "@/lib/next-task";
+import { safeName } from "@/lib/storage-paths";
 
 const storeFile = () => path.join(process.env.CREATOROS_DATA_DIR || path.join(process.cwd(), "data"), "creatoros.json");
 export const dataDirectory = () => path.dirname(storeFile());
@@ -28,6 +29,11 @@ function migrate(value: unknown): CreatorState {
     actionProposals: Array.isArray(state.actionProposals) ? state.actionProposals : [],
     assistantLayout: validateAssistantLayout(state.assistantLayout),
   } as CreatorState;
+  for (const project of migrated.projects) {
+    if (typeof project.storageFolder !== "string" || !project.storageFolder || /[\\/]/.test(project.storageFolder) || project.storageFolder === "." || project.storageFolder === "..") {
+      project.storageFolder = safeName(project.title) + "_" + project.id.replace(/[^a-zA-Z0-9]/g, "").slice(-6);
+    }
+  }
   migrateNextTasks(migrated); return migrated;
 }
 

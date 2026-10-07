@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, ChevronDown, ChevronRight, File, Folder, FolderOpen, Pencil, Plus, RefreshCw } from "lucide-react";
 import type { CreatorState, Project, Task } from "@/lib/model";
 import { isoDateTime, localDateTime, manualAction } from "@/lib/client-api";
 import { MediaPanel } from "@/components/media-panel";
 import { EntityActions } from "@/components/entity-menu";
+import { projectMediaRoot } from "@/lib/storage-paths";
 import CompletionToggle from "@/components/completion-toggle";
 
 export function TaskPanel({ data, project, onState }: { data: CreatorState; project: Project; onState: (state: CreatorState) => void }) {
@@ -25,9 +26,69 @@ function TaskCard({ task, data, onState }: { task: Task; data: CreatorState; onS
 
 export function ContentEditor({ project, onState }: { project: Project; onState: (state: CreatorState) => void }) {
   const [title, setTitle] = useState(project.title); const [summary, setSummary] = useState(project.summary); const [caption, setCaption] = useState(project.caption || ""); const [hooks, setHooks] = useState((project.hooks || []).join("\n")); const [platform, setPlatform] = useState(project.platform || "Other"); const [publish, setPublish] = useState(localDateTime(project.publishAt)); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
-  return <section className="content-editor"><h2>Content & Veröffentlichung</h2><p>Texte vorbereiten und einen Veröffentlichungstermin vormerken. Die Veröffentlichung selbst bleibt manuell.</p><form className="integration-form" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setMessage(""); try { await manualAction({ name: "updateContent", args: { id: project.id, title, summary, caption, hooks: hooks.split("\n").filter((line) => line.trim()), platform, publishAt: isoDateTime(publish) } }, onState); setMessage("Content gespeichert."); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Content konnte nicht gespeichert werden."); } finally { setBusy(false); } }}>
+  return <section className="content-editor"><h2>Upload Infos</h2><p>Titel, Beschreibung und Plattformdaten für deinen späteren Upload vorbereiten. Veröffentlicht wird weiterhin manuell.</p><form className="integration-form" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setMessage(""); try { await manualAction({ name: "updateContent", args: { id: project.id, title, summary, caption, hooks: hooks.split("\n").filter((line) => line.trim()), platform, publishAt: isoDateTime(publish) } }, onState); setMessage("Content gespeichert."); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Content konnte nicht gespeichert werden."); } finally { setBusy(false); } }}>
     <label>Titel<input value={title} maxLength={100} required onChange={(event) => setTitle(event.target.value)}/></label><label>Beschreibung<textarea value={summary} maxLength={500} rows={3} onChange={(event) => setSummary(event.target.value)}/></label><label>Caption<textarea value={caption} maxLength={4000} rows={4} onChange={(event) => setCaption(event.target.value)}/></label><label>Hooks (ein Hook je Zeile)<textarea value={hooks} rows={3} onChange={(event) => setHooks(event.target.value)}/></label><div className="integration-form-row"><label>Plattform<select value={platform} onChange={(event) => setPlatform(event.target.value as typeof platform)}>{["Instagram","TikTok","YouTube","Other"].map((name) => <option key={name}>{name}</option>)}</select></label><label>Geplante Veröffentlichung<input type="datetime-local" value={publish} onChange={(event) => setPublish(event.target.value)}/></label></div><button className="button-primary" disabled={busy}>Content speichern</button>{message && <p role="status">{message}</p>}
   </form></section>;
+}
+
+type ProjectEntry = { name: string; directory: boolean; size: number };
+export function ProjectFileBrowser({ data, project, onState }: { data: CreatorState; project: Project; onState: (state: CreatorState) => void }) {
+  const [folder, setFolder] = useState(""); const [entries, setEntries] = useState<ProjectEntry[]>([]); const [explorerPath, setExplorerPath] = useState("");
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState(""); const [dropTarget, setDropTarget] = useState("");
+  const [dialog, setDialog] = useState<{ action: "mkdir" | "rename"; path?: string; name: string } | null>(null);
+  const smb = data.integrations.nas.enabled && data.integrations.nas.protocol === "smb";
+  const root = projectMediaRoot(project);
+  const load = async (nextFolder = folder) => {
+    if (!smb) return;
+    setBusy(true); setError("");
+    try {
+      const params = new URLSearchParams({ projectId: project.id, path: nextFolder ? root + "/" + nextFolder : "" });
+      const response = await fetch("/api/project-files?" + params, { cache: "no-store" }); const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Projektordner konnte nicht gelesen werden.");
+      setEntries(payload.entries || []); setExplorerPath(payload.explorerPath || "");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Projektordner konnte nicht gelesen werden."); }
+    finally { setBusy(false); }
+  };
+  useEffect(() => { setFolder(""); void load(""); }, [project.id, smb]);
+  const currentPath = folder ? root + "/" + folder : root;
+  const post = async (body: Record<string, unknown>) => {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch("/api/project-files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.id, ...body }) }); const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Ordneraktion fehlgeschlagen.");
+      if (payload.state) onState(payload.state);
+      await load(); setMessage(body.action === "mkdir" ? "Ordner erstellt." : body.action === "rename" ? "Ordner umbenannt." : "Element verschoben.");
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Ordneraktion fehlgeschlagen."); return false; }
+    finally { setBusy(false); }
+  };
+  const move = async (source: string, destination: string) => {
+    if (source === destination || destination.startsWith(source + "/")) return;
+    await post({ action: "move", from: source, to: destination ? root + "/" + destination : root });
+  };
+  const crumbs = folder ? folder.split("/") : [];
+  const formatSize = (size: number) => size >= 1024 * 1024 ? (size / 1024 / 1024).toFixed(1) + " MB" : Math.max(1, Math.ceil(size / 1024)) + " KB";
+  const navigate = (path: string) => { setFolder(path); void load(path); };
+  return <section className="project-file-browser">
+    <header className="project-browser-header"><div><span className="action-label">PROJEKTMATERIAL</span><h2>Dateien & Ordner</h2><p>Auch Ordner aus dem Explorer werden hier angezeigt.</p></div><button className="button-secondary" disabled={!smb || busy} onClick={() => { setMessage(""); setDialog({ action: "mkdir", name: "" }); }}><Plus size={17}/> Neuer Ordner</button></header>
+    {!smb ? <div className="project-browser-empty"><FolderOpen size={23}/><b>SMB-Dateibrowser nicht verbunden</b><span>Verbinde zuerst deine SMB-Freigabe unter Einstellungen → Integrationen.</span></div> : <>
+      <div className="project-browser-location"><div className="project-browser-crumbs" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); setDropTarget(""); const source = event.dataTransfer.getData("text/plain"); if (source) void move(source, ""); }}><button onClick={() => navigate("")}>Projektordner</button>{crumbs.map((part, index) => { const path = crumbs.slice(0,index + 1).join("/"); return <span key={path}><ChevronRight size={14}/><button onClick={() => navigate(path)}>{part}</button></span>; })}</div><button className="button-ghost explorer-copy" title="Explorer-Pfad kopieren" onClick={() => void navigator.clipboard.writeText(explorerPath).then(() => setMessage("Explorer-Pfad kopiert.")).catch(() => setError("Explorer-Pfad konnte nicht kopiert werden."))}>Explorer-Pfad kopieren</button></div>
+      {error && <p className="brain-error" role="alert">{error}</p>}{message && <p className="project-browser-message" role="status">{message}</p>}
+      <div className="project-browser-list" aria-busy={busy}>
+        <div className="project-browser-list-head"><span>Name</span><span>Typ / Größe</span><span>Aktion</span></div>
+        {folder && <button className="project-browser-parent" onClick={() => navigate(crumbs.slice(0,-1).join("/"))}><FolderOpen size={18}/> Übergeordneter Ordner</button>}
+        {entries.slice().sort((a,b) => Number(b.directory)-Number(a.directory) || a.name.localeCompare(b.name,"de")).map((entry) => {
+          const itemPath = currentPath + "/" + entry.name; const target = folder ? folder + "/" + entry.name : entry.name;
+          return <div key={itemPath} className={"project-browser-row " + (dropTarget === itemPath ? "is-drop-target" : "")} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain",itemPath); event.dataTransfer.effectAllowed = "move"; }} onDragOver={(event) => { if (entry.directory) { event.preventDefault(); setDropTarget(itemPath); } }} onDragLeave={() => setDropTarget("")} onDrop={(event) => { if (!entry.directory) return; event.preventDefault(); event.stopPropagation(); setDropTarget(""); const source = event.dataTransfer.getData("text/plain"); if (source) void move(source,target); }}>
+            <button className="project-browser-entry-name" onClick={() => entry.directory && navigate(target)} disabled={!entry.directory || busy}>{entry.directory ? <Folder size={19}/> : <File size={18}/>}<span>{entry.name}</span>{entry.directory && <ChevronRight size={15}/>}</button><span className="project-browser-meta">{entry.directory ? "Ordner" : formatSize(entry.size)}</span>{entry.directory ? <button className="project-browser-rename" aria-label={entry.name + " umbenennen"} title="Ordner umbenennen" disabled={busy} onClick={() => setDialog({ action: "rename", path: itemPath, name: entry.name })}><Pencil size={16}/></button> : <span/>}
+          </div>;
+        })}
+        {!entries.length && !busy && <div className="project-browser-empty"><FolderOpen size={22}/><b>Dieser Ordner ist noch leer.</b><span>Lege einen Ordner an oder lade Dateien im seitlichen Medienbereich hoch.</span></div>}
+        {busy && <p className="project-browser-loading"><RefreshCw size={16}/> Wird geladen …</p>}
+      </div><p className="project-browser-hint">Dateien oder Ordner auf einen Zielordner ziehen, um sie zu verschieben.</p>
+    </>}
+    {dialog && <div className="modal-backdrop"><form className="dialog" role="dialog" aria-modal="true" aria-label={dialog.action === "mkdir" ? "Ordner erstellen" : "Ordner umbenennen"} onSubmit={(event) => { event.preventDefault(); const name = dialog.name.trim(); if (!name) return; const action = dialog.action === "mkdir" ? { action: "mkdir", path: folder ? root + "/" + folder : root, name } : { action: "rename", from: dialog.path, name }; void post(action).then((saved) => { if (saved) setDialog(null); }); }}><h2>{dialog.action === "mkdir" ? "Neuen Ordner erstellen" : "Ordner umbenennen"}</h2><label>Ordnername<input autoFocus value={dialog.name} maxLength={90} required onChange={(event) => setDialog({ ...dialog, name: event.target.value })}/></label>{error && <p className="brain-error" role="alert">{error}</p>}<div className="screen-action-group"><button type="button" className="button-secondary" disabled={busy} onClick={() => setDialog(null)}>Abbrechen</button><button className="button-primary" disabled={busy || !dialog.name.trim()}>{busy ? "Wird gespeichert …" : dialog.action === "mkdir" ? "Erstellen" : "Speichern"}</button></div></form></div>}
+  </section>;
 }
 
 export function PlanningScreen({ data, onState }: { data: CreatorState; onState: (state: CreatorState) => void }) {

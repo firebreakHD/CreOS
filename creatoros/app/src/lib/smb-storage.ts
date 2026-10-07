@@ -6,7 +6,8 @@ import { StorageError, MAX_UPLOAD_BYTES, type FileResult, type StorageProvider }
 import type { NasConfig } from "@/lib/model";
 import { safeRelativePath } from "@/lib/storage-paths";
 
-type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string };
+type SmbEntry = { name: string; directory: boolean; size: number };
+type SmbResult = { ok: boolean; error?: string; status?: number; length?: number; contentRange?: string; entries?: SmbEntry[] };
 type SmbCommand = { operation: string; config: NasConfig; password: string; path?: string; to?: string; size?: number; range?: string };
 export type SmbRunner = (command: SmbCommand, body?: ReadableStream<Uint8Array>) => Promise<{ metadata: SmbResult; body?: ReadableStream<Uint8Array> }>;
 
@@ -83,4 +84,6 @@ export class SmbStorageProvider implements StorageProvider {
   }
   async deleteFile(relativePath: string) { await this.call("delete", { path: relativePath }); }
   async moveFile(from: string, to: string) { await this.call("move", { path: from, to }); }
+  async listFolder(relativePath: string): Promise<SmbEntry[]> { return (await this.call("list", { path: relativePath })).metadata.entries || []; }
+  async createFolder(relativePath: string) { await this.call("mkdir", { path: relativePath }); }
 }

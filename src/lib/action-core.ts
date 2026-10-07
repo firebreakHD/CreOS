@@ -1,5 +1,6 @@
 import { id, now, type AiPermission, type CreatorState, type MediaRole, type Project, type StructuredAction, type Task } from "./model.ts";
 import { setNextTaskText, syncNextTask } from "./next-task.ts";
+import { safeName } from "./storage-paths.ts";
 
 export const ACTION_PERMISSIONS: Record<string, AiPermission> = {
   createTask: "task.create", updateTask: "task.update", completeTask: "task.complete",
@@ -134,7 +135,8 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
   }
   if (action.name === "createContent") {
     const timestamp = now();
-    const item: Project = { id: id(), title: text(input.title, "Projektname", 100, true), summary: input.summary === undefined ? "" : text(input.summary, "Beschreibung", 500), status: "active", nextAction: typeof input.nextAction === "string" ? text(input.nextAction, "Nächster Schritt", 500) : "", lastProgress: "Projekt angelegt", lastTouchedAt: timestamp, createdAt: timestamp, pipeline: input.pipeline === undefined ? "ideas" : choose(input.pipeline, pipelines, "Pipeline"), scripts: [], materials: [] };
+    const projectId = id(); const title = text(input.title, "Projektname", 100, true);
+    const item: Project = { id: projectId, title, storageFolder: safeName(title) + "_" + projectId.replace(/[^a-zA-Z0-9]/g, "").slice(-6), summary: input.summary === undefined ? "" : text(input.summary, "Beschreibung", 500), status: "active", nextAction: typeof input.nextAction === "string" ? text(input.nextAction, "Nächster Schritt", 500) : "", lastProgress: "Projekt angelegt", lastTouchedAt: timestamp, createdAt: timestamp, pipeline: input.pipeline === undefined ? "ideas" : choose(input.pipeline, pipelines, "Pipeline"), scripts: [], materials: [] };
     state.projects.unshift(item); state.activeProjectId = item.id;
     const nextAction = item.nextAction; item.nextTaskId = ""; item.nextAction = ""; setNextTaskText(state,item,nextAction);
     return item;

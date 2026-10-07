@@ -1,5 +1,6 @@
 import type { BrainStore } from "./brain";
 import { migrateNextTasks } from "./next-task.ts";
+import { safeName } from "./storage-paths.ts";
 
 export type ScriptSection = { id: string; title: string; body: string; done: boolean };
 export type MaterialItem = { id: string; name: string; note: string; kind: "video" | "audio" | "image" | "note" };
@@ -24,6 +25,7 @@ export type Project = {
   status: "active" | "paused" | "complete";
   nextAction: string;
   nextTaskId?: string;
+  storageFolder?: string;
   lastProgress: string;
   lastTouchedAt: string;
   createdAt: string;
@@ -83,6 +85,7 @@ export function initialState(): CreatorState {
     projects: [{
       id: "lego-october-comeback",
       title: "LEGO – Oktober Comeback",
+      storageFolder: safeName("LEGO – Oktober Comeback") + "_" + "lego-october-comeback".replace(/[^a-zA-Z0-9]/g, "").slice(-6),
       summary: "Die Challenge mit altem Material zu Ende erzählen.",
       status: "active",
       nextAction: "Im alten Material die Stelle „bis Ende des Jahres“ finden und dort einen Marker setzen.",
