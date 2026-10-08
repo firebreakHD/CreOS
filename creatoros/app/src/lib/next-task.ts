@@ -1,4 +1,5 @@
 import type { CreatorState, Project } from "./model.ts";
+import { createId } from "./id.ts";
 export function syncNextTask(state: CreatorState, project: Project) {
   const available = state.tasks.filter((task) => task.projectId === project.id && task.status !== "done");
   const next = available.find((task) => task.id === project.nextTaskId) || available.find((task) => task.status === "doing") || available[0];
@@ -10,7 +11,7 @@ export function setNextTaskText(state: CreatorState, project: Project, title: st
   let task = state.tasks.find((item) => item.id === project.nextTaskId && item.projectId === project.id && item.status !== "done");
   const timestamp = new Date().toISOString();
   if (task) { task.title = text; task.updatedAt = timestamp; }
-  else { task = { id: crypto.randomUUID(),projectId: project.id,title: text,description: "",status: "open",dueAt: null,createdAt: timestamp,updatedAt: timestamp }; state.tasks.push(task); }
+  else { task = { id: createId(),projectId: project.id,title: text,description: "",status: "open",dueAt: null,createdAt: timestamp,updatedAt: timestamp }; state.tasks.push(task); }
   project.nextTaskId = task.id; syncNextTask(state,project);
 }
 export function migrateNextTasks(state: CreatorState) {

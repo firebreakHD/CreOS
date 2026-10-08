@@ -30,7 +30,7 @@ test("manual media deletion removes the actual file and every link; project dele
     const upload=await uploadMedia(new Request("http://creatoros/api/media?entityId="+project.id,{method:"POST",headers:{"x-file-name":"demo.txt","x-file-size":String(body.length)},body})); const media=upload.media;
     const file=path.join(directory,"media",media.relativePath); await access(file);
     await assert.rejects(() => executeAction({name:"deleteMedia",args:{id:media.id,confirm:false}}),/bestätigen/); await access(file);
-    await assert.rejects(() => executeAction({name:"deleteMedia",args:{id:media.id,confirm:true}},"ai"),/manuell/); await access(file);
+    await assert.rejects(() => executeAction({name:"deleteMedia",args:{id:media.id,confirm:true}},"ai"),/nicht freigegeben/); await access(file);
     await executeAction({name:"removeMaterial",args:{id:project.id,materialId:project.materials[0].id}}); assert.equal((await readState()).projects[0].materials.length,2);
     await executeAction({name:"deleteContent",args:{id:project.id,confirm:true}}); const removed=await readState(); assert.equal(removed.projects.length,0); assert.equal(removed.tasks.length,0); assert.equal(removed.media[0].links.length,0); await access(file);
     await executeAction({name:"deleteMedia",args:{id:media.id,confirm:true}}); assert.equal((await readState()).media.length,0); await assert.rejects(() => access(file),{code:"ENOENT"});

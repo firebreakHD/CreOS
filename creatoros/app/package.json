@@ -1,6 +1,6 @@
 {
   "name": "creatoros",
-  "version": "0.1.17",
+  "version": "0.1.21",
   "private": true,
   "description": "Ein persönlicher Start- und Produktionsassistent für Creator.",
   "scripts": {

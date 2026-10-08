@@ -3,17 +3,20 @@ import { setNextTaskText, syncNextTask } from "./next-task.ts";
 import { safeName } from "./storage-paths.ts";
 
 export const ACTION_PERMISSIONS: Record<string, AiPermission> = {
-  createTask: "task.create", updateTask: "task.update", completeTask: "task.complete",
-  createContent: "content.create", updateContent: "content.update", scheduleContent: "content.schedule",
-  createIdea: "idea.create", attachMedia: "media.attach", detachMedia: "media.attach",
-  uploadMedia: "media.upload",
-  createPlanning: "planning.write", updatePlanning: "planning.write",
+  createTask: "task.create", updateTask: "task.update", completeTask: "task.complete", deleteTask: "task.delete",
+  createContent: "content.create", updateContent: "content.update", scheduleContent: "content.schedule", deleteContent: "content.delete",
+  createIdea: "idea.create", updateIdea: "idea.manage", deleteIdea: "idea.manage", convertIdea: "idea.convert",
+  attachMedia: "media.attach", detachMedia: "media.attach", renameMedia: "media.manage", deleteMedia: "media.delete", uploadMedia: "media.upload",
+  listProjectFiles: "media.browse", ensureProjectFolder: "media.folders", createProjectFolder: "media.folders", renameProjectFolder: "media.folders", moveProjectFile: "media.folders",
+  createPlanning: "planning.write", updatePlanning: "planning.write", deletePlanning: "planning.delete", removeMaterial: "material.manage",
+  startSession: "session.manage", pauseSession: "session.manage", finishSession: "session.manage", extendSession: "session.manage",
 };
 export const permissionLabels: Record<AiPermission, string> = {
-  "task.create": "Aufgaben erstellen", "task.update": "Aufgaben ändern & verschieben", "task.complete": "Aufgaben abschließen",
-  "content.create": "Content / Projekte erstellen", "content.update": "Content / Projekte bearbeiten",
-  "content.schedule": "Veröffentlichungen planen", "media.upload": "Medien hochladen",
-  "media.attach": "Medien zuordnen", "planning.write": "Planung erstellen & ändern", "idea.create": "Ideen erstellen",
+  "task.create": "Aufgaben erstellen", "task.update": "Aufgaben ändern & verschieben", "task.complete": "Aufgaben abschließen", "task.delete": "Aufgaben löschen",
+  "content.create": "Projekte erstellen", "content.update": "Projekte, Upload-Infos, Skripte und Material bearbeiten", "content.schedule": "Veröffentlichungen planen", "content.delete": "Projekte löschen",
+  "media.upload": "Textdateien hochladen", "media.attach": "Medien zuordnen", "media.manage": "Mediendateien umbenennen", "media.delete": "Mediendateien dauerhaft löschen", "media.browse": "Projektdateien und Ordner ansehen", "media.folders": "Projektordner erstellen, umbenennen und verschieben",
+  "planning.write": "Planung erstellen & ändern", "planning.delete": "Planung löschen", "idea.create": "Ideen erstellen", "idea.manage": "Ideen ändern und löschen", "idea.convert": "Ideen in Projekte umwandeln",
+  "material.manage": "Materialnotizen entfernen", "session.manage": "Fokussessions starten und verwalten",
 };
 export class ActionError extends Error {
   status: number;
@@ -47,6 +50,7 @@ export function actionPermission(action: StructuredAction, state: CreatorState):
 
 export function actionPermissions(action: StructuredAction, state: CreatorState): AiPermission[] {
   const required = [actionPermission(action, state)];
+  if (action.name === "convertIdea") required.push("content.create");
   if (action.name === "updateContent") required.push("content.update");
   if ((action.name === "updateContent" || action.name === "createContent") && action.args.nextAction) required.push(state.tasks.some((task) => task.id === state.projects.find((project) => project.id === action.args.id)?.nextTaskId) ? "task.update" : "task.create");
   if (action.name === "updateTask") required.push("task.update");
@@ -67,6 +71,20 @@ export function actionFingerprint(state: CreatorState, action: StructuredAction)
     attachMedia: state.media.find((item) => item.id === action.args.mediaId),
     detachMedia: state.media.find((item) => item.id === action.args.mediaId),
     updatePlanning: state.planning.find((item) => item.id === action.args.id),
+    deleteContent: state.projects.find((item) => item.id === action.args.id),
+    deleteTask: state.tasks.find((item) => item.id === action.args.id),
+    updateIdea: state.ideas.find((item) => item.id === action.args.id),
+    deleteIdea: state.ideas.find((item) => item.id === action.args.id),
+    convertIdea: state.ideas.find((item) => item.id === action.args.id),
+    deletePlanning: state.planning.find((item) => item.id === action.args.id),
+    deleteMedia: state.media.find((item) => item.id === action.args.id),
+    renameMedia: state.media.find((item) => item.id === action.args.id),
+    removeMaterial: state.projects.find((item) => item.id === action.args.id),
+    listProjectFiles: state.projects.find((item) => item.id === action.args.projectId),
+    ensureProjectFolder: state.projects.find((item) => item.id === action.args.projectId),
+    createProjectFolder: state.projects.find((item) => item.id === action.args.projectId),
+    renameProjectFolder: state.projects.find((item) => item.id === action.args.projectId),
+    moveProjectFile: state.projects.find((item) => item.id === action.args.projectId),
     uploadMedia: action.args.entityType === "task" ? state.tasks.find((item) => item.id === action.args.entityId) : state.projects.find((item) => item.id === action.args.entityId),
   };
   return Object.hasOwn(targets, action.name) ? JSON.stringify(targets[action.name] || null) : "";
@@ -97,6 +115,20 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
   if (action.name === "deletePlanning") {
     if (!state.planning.some((entry) => entry.id === input.id) || input.confirm !== true) throw new ActionError("Planungslöschung bitte bestätigen.");
     state.planning = state.planning.filter((entry) => entry.id !== input.id); return { id: input.id };
+  }
+  if (action.name === "deleteMedia") {
+    const media = state.media.find((entry) => entry.id === input.id);
+    if (!media || input.confirm !== true) throw new ActionError("Dateilöschung bitte bestätigen.", 404);
+    return media;
+  }
+  if (action.name === "convertIdea") {
+    const index = state.ideas.findIndex((entry) => entry.id === input.id);
+    if (index < 0) throw new ActionError("Idee nicht gefunden.",404);
+    const idea = state.ideas[index];
+    const created = applyAction(state, { name: "createContent", args: { title: idea.text.slice(0,80), summary: idea.text.slice(0,500), pipeline: "ideas" } }) as Project;
+    created.lastProgress = "Aus einer Idee gestartet";
+    state.ideas.splice(index,1);
+    return { convertedProjectId: created.id, project: created };
   }
   if (action.name === "uploadMedia") {
     const entityType = choose(input.entityType, ["project", "task"], "Zuordnung");
@@ -228,6 +260,47 @@ export function applyAction(state: CreatorState, action: StructuredAction): unkn
     if (input.title !== undefined) entry.title = text(input.title, "Planung", 200, true);
     if (input.startsAt !== undefined) { const start = date(input.startsAt); if (!start) throw new ActionError("Planungszeit fehlt."); entry.startsAt = start; }
     return entry;
+  }
+  if (action.name === "startSession") {
+    const active = state.sessions.find((session) => !session.endedAt);
+    if (active) return active;
+    const projectId = typeof input.projectId === "string" && input.projectId ? input.projectId : state.activeProjectId;
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) throw new ActionError("Wähle zuerst ein aktives Projekt.");
+    const minutes = input.durationMinutes === undefined ? 10 : Math.max(1,Math.min(240,Math.round(Number(input.durationMinutes))));
+    if (!Number.isFinite(minutes)) throw new ActionError("Die Session-Länge ist ungültig.");
+    const startedAt = now(); state.activeProjectId = project.id; project.lastTouchedAt = startedAt;
+    const session = { id: id(), projectId: project.id, startedAt, endedAt: null, durationMinutes: minutes, minimumMinutes: 10, nextActionAfter: "", elapsedSeconds: 0, runSegmentStartedAt: startedAt, isPaused: false };
+    state.sessions.unshift(session); return session;
+  }
+  if (action.name === "pauseSession") {
+    const session = state.sessions.find((item) => !item.endedAt);
+    if (!session) throw new ActionError("Es läuft gerade keine Session.",409);
+    const paused = input.paused === true;
+    if (paused && !session.isPaused) {
+      session.elapsedSeconds += session.runSegmentStartedAt ? Math.max(0,(Date.now() - Date.parse(session.runSegmentStartedAt)) / 1000) : 0;
+      session.runSegmentStartedAt = null; session.isPaused = true;
+    } else if (!paused && session.isPaused) { session.runSegmentStartedAt = now(); session.isPaused = false; }
+    return session;
+  }
+  if (action.name === "finishSession") {
+    const session = state.sessions.find((item) => !item.endedAt);
+    if (!session) throw new ActionError("Es läuft gerade keine Session.",409);
+    const endedAt = now(); session.endedAt = endedAt;
+    const elapsed = Math.max(1,Math.round((session.elapsedSeconds + (session.isPaused || !session.runSegmentStartedAt ? 0 : Math.max(0,(Date.parse(endedAt) - Date.parse(session.runSegmentStartedAt)) / 1000))) / 60));
+    session.durationMinutes = elapsed;
+    const nextAction = input.nextAction === undefined ? "" : text(input.nextAction,"Nächster Schritt",500);
+    session.nextActionAfter = nextAction;
+    const project = state.projects.find((item) => item.id === session.projectId);
+    if (project) { project.lastTouchedAt = endedAt; if (nextAction) { setNextTaskText(state,project,nextAction); project.lastProgress = "Session abgeschlossen"; } }
+    return { session, project: project || null };
+  }
+  if (action.name === "extendSession") {
+    const session = state.sessions.find((item) => !item.endedAt);
+    if (!session) throw new ActionError("Es läuft gerade keine Session.",409);
+    const minutes = Math.max(1,Math.min(60,Math.round(Number(input.minutes))));
+    if (!Number.isFinite(minutes)) throw new ActionError("Die Verlängerung ist ungültig.");
+    session.durationMinutes += minutes; return session;
   }
   throw new ActionError("Unbekannte Aktion.");
 }

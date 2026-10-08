@@ -1,6 +1,7 @@
 import type { BrainStore } from "./brain";
 import { migrateNextTasks } from "./next-task.ts";
 import { safeName } from "./storage-paths.ts";
+import { createId } from "./id.ts";
 
 export type ScriptSection = { id: string; title: string; body: string; done: boolean };
 export type MaterialItem = { id: string; name: string; note: string; kind: "video" | "audio" | "image" | "note" };
@@ -9,7 +10,7 @@ export type PlanningEntry = { id: string; title: string; startsAt: string; proje
 export type MediaRole = "asset" | "reference" | "raw" | "export" | "other";
 export type MediaLink = { entityType: "project" | "task"; entityId: string; role: MediaRole };
 export type MediaRecord = { id: string; originalFilename: string; displayName: string; mimeType: string; fileSize: number; storageProvider: "local" | "nas"; storageId: string; relativePath: string; createdAt: string; links: MediaLink[] };
-export type AiPermission = "task.create" | "task.update" | "task.complete" | "content.create" | "content.update" | "content.schedule" | "media.upload" | "media.attach" | "planning.write" | "idea.create";
+export type AiPermission = "task.create" | "task.update" | "task.complete" | "task.delete" | "content.create" | "content.update" | "content.schedule" | "content.delete" | "media.upload" | "media.attach" | "media.manage" | "media.delete" | "media.browse" | "media.folders" | "planning.write" | "planning.delete" | "idea.create" | "idea.manage" | "idea.convert" | "material.manage" | "session.manage";
 export type IntegrationStatus = "not_configured" | "connected" | "error" | "incomplete";
 export type AiConfig = { enabled: boolean; provider: "openai" | "codex"; model: string; secretId: string; mode: "suggest" | "confirm" | "auto"; permissions: AiPermission[]; requireConfirmation: AiPermission[]; status: IntegrationStatus; message: string };
 export type NasConfig = { enabled: boolean; name: string; host: string; port: number; protocol: "smb" | "webdav-https" | "webdav-http"; share?: string; domain?: string; encrypt?: boolean; baseFolder: string; username: string; secretId: string; storageId: string; status: IntegrationStatus; message: string };
@@ -67,7 +68,7 @@ export type CreatorState = {
   assistantLayout: AssistantLayout;
 };
 
-export const id = () => crypto.randomUUID();
+export const id = () => createId();
 export const now = () => new Date().toISOString();
 
 export const initialIntegrations = (): Integrations => ({
