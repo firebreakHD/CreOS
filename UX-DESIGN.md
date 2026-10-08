@@ -59,7 +59,7 @@ Heute → große Next Action + „10 Minuten starten“ → Fokus → Fertig →
 
 Die nächste Handlung ist dieselbe offene Aufgabe wie in der Aufgabenliste. Auf Heute und im Projekt wird sie mit Titel, großem Abhaken und Zahl offener Aufgaben angezeigt. Es gibt kein separates editierbares Next-Action-Feld; Umbenennen, Löschen und „Als nächsten Schritt wählen“ liegen am Task im Kontextmenü. Beim Abhaken rückt die nächste offene Aufgabe nach.
 
-Capture hat ein Textfeld, eine sichtbare Spracheingabe und optionale Projektzuordnung. Kein Pflicht-Tag, Datum oder Kategorie. Sprachaufnahme nutzt Browser Speech Recognition, wenn vorhanden; Text bleibt immer verfügbar. Touchflächen sind mindestens 44 CSS-Pixel hoch angelegt; Safe Areas und Hochformat werden berücksichtigt. Projekt und Kanban sind mobil benutzbar, aber abschnittsweise/als einzelne Spalte aufgebaut.
+Capture hat ein Textfeld, eine sichtbare Diktieraktion und optionale Projektzuordnung. Kein Pflicht-Tag, Datum oder Kategorie. Die Diktieraktion nutzt Browser Speech Recognition, wenn vorhanden; andernfalls fokussiert sie das Textfeld und erklärt die Diktierfunktion der Handy-Tastatur. Speichern-Fehler erscheinen im Dialog, der eingegebene Text bleibt erhalten. Touchflächen sind mindestens 44 CSS-Pixel hoch angelegt; Safe Areas und Hochformat werden berücksichtigt. Projekt und Kanban sind mobil benutzbar, aber abschnittsweise/als einzelne Spalte aufgebaut.
 
 ## F. Desktop Flow
 

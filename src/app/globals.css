@@ -2211,7 +2211,7 @@ button,select {
 }
 
 .voice-button {
-  height:35px;
+  min-height:44px;
   display:flex;
   align-items:center;
   gap:7px;
@@ -2220,8 +2220,11 @@ button,select {
   border-radius:7px;
   background:#1b1e2d;
   color:#c1b5ef;
-  font-size:13px
+  font-size:14px
 }
+
+.capture-voice-help { flex-basis:100%; color:#aab8ca; font-size:13px; line-height:1.5; }
+.capture-save-error { margin:12px 0 0; padding:10px 12px; border:1px solid #805452; border-radius:8px; background:#351d22; color:#ffd5d1; font-size:14px; line-height:1.5; }
 
 .voice-listening {
   border-color:#9a6d8b;
@@ -2264,7 +2267,7 @@ button,select {
 }
 
 .capture-save {
-  height:37px;
+  min-height:44px;
   padding:0 14px
 }
 
@@ -2957,6 +2960,9 @@ button,select {
   .capture-options {
     align-items:stretch;
     flex-direction:column
+  }
+  .capture-voice-help {
+    flex-basis:auto
   }
   .voice-button {
     height:43px;

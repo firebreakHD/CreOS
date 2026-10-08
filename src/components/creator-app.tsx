@@ -299,7 +299,7 @@ export default function CreatorApp() {
       {screen === "session-end" && focusProject && <SessionEndScreen project={focusProject} session={session} value={sessionNext} setValue={setSessionNext} busy={busy} onSave={() => void finishSession(sessionNext)} onSkip={() => void finishSession("")}/>}
     </div>}
     <AssistantWidget data={data} projectId={["project","script","focus","session-end"].includes(screen) ? project?.id || null : null} onState={applyState} onSetup={() => nav("integrations")}/>
-    {quickCapture && <QuickCapture projects={data.projects} onClose={() => setQuickCapture(false)} onSave={onQuickCaptureSave} onNotify={notify}/>}
+    {quickCapture && <QuickCapture projects={data.projects} onClose={() => setQuickCapture(false)} onSave={onQuickCaptureSave}/>}
     {createPipeline && <CreateProjectDialog pipeline={createPipeline} onClose={() => setCreatePipeline(null)} onSave={createProject}/>}
     <div className={`toast ${toast ? "toast-visible" : ""}`} role="status" aria-live="polite">{toast}</div>
   </>;
@@ -440,35 +440,47 @@ function CreateProjectDialog({ pipeline, onClose, onSave }: { pipeline: Project[
   </div>;
 }
 
-function QuickCapture({ projects, onClose, onSave, onNotify }: { projects: Project[]; onClose: () => void; onSave: (text: string, projectId?: string) => Promise<boolean>; onNotify: (message: string) => void }) {
+function QuickCapture({ projects, onClose, onSave }: { projects: Project[]; onClose: () => void; onSave: (text: string, projectId?: string) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  const [voiceHelp, setVoiceHelp] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [projectId, setProjectId] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   useEffect(() => { input.current?.focus(); return () => recognition.current?.stop(); }, []);
   const speak = () => {
+    setVoiceHelp("");
     if (listening) { recognition.current?.stop(); setListening(false); return; }
     const browser = window as unknown as { SpeechRecognition?: new() => SpeechRecognitionLike; webkitSpeechRecognition?: new() => SpeechRecognitionLike };
     const SpeechRecognition = browser.SpeechRecognition || browser.webkitSpeechRecognition;
-    if (!SpeechRecognition) { onNotify("Spracheingabe ist in diesem Browser nicht verfügbar. Du kannst die Idee eintippen."); return; }
+    if (!SpeechRecognition) {
+      input.current?.focus();
+      setVoiceHelp("Tippe jetzt auf das Mikrofon deiner Handy-Tastatur. Der diktierte Text erscheint direkt hier.");
+      return;
+    }
     const instance = new SpeechRecognition();
     instance.lang = "de-AT";
     instance.interimResults = false;
     instance.onresult = (event) => { const phrase = Array.from(event.results).map((result) => result[0]?.transcript || "").join(" "); setText((current) => `${current}${current ? " " : ""}${phrase}`); };
-    instance.onerror = () => { setListening(false); onNotify("Die Spracheingabe konnte nicht gestartet werden."); };
+    instance.onerror = () => { setListening(false); setVoiceHelp("Die Browser-Spracherkennung hat nicht gestartet. Nutze stattdessen das Mikrofon deiner Handy-Tastatur."); input.current?.focus(); };
     instance.onend = () => setListening(false);
     recognition.current = instance;
     setListening(true);
-    try { instance.start(); } catch { setListening(false); onNotify("Die Mikrofonfreigabe ist noch nicht verfügbar."); }
+    try { instance.start(); } catch { setListening(false); setVoiceHelp("Mikrofon nicht verfügbar. Nutze stattdessen das Mikrofon deiner Handy-Tastatur."); input.current?.focus(); }
   };
   const submit = async () => {
     if (!text.trim() || saving) { input.current?.focus(); return; }
+    setSaveError("");
     setSaving(true);
-    try { if (await onSave(text.trim(), projectId || undefined)) setText(""); } finally { setSaving(false); }
+    try {
+      if (await onSave(text.trim(), projectId || undefined)) setText("");
+      else setSaveError("Die Idee wurde nicht gespeichert. Deine Eingabe ist noch da. Bitte erneut versuchen.");
+    } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Die Idee wurde nicht gespeichert. Deine Eingabe ist noch da."); }
+    finally { setSaving(false); }
   };
-  return <div className="capture-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="capture-dialog" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div className="capture-top"><div><div className="eyebrow">SCHNELL FESTHALTEN</div><h2 id="capture-title">Was ist dir gerade eingefallen?</h2></div><button className="capture-close" onClick={onClose} disabled={saving} aria-label="Schließen"><X size={19}/></button></div><textarea ref={input} value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit(); if (event.key === "Escape" && !saving) onClose(); }} placeholder="Ein Satz reicht. Sortieren kannst du später." rows={4}/><div className="capture-options"><button className={`voice-button ${listening ? "voice-listening" : ""}`} onClick={speak}><AudioLines size={16}/>{listening ? "Höre zu …" : "Sprechen"}</button><label className="capture-project"><span>Projekt (optional)</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Später entscheiden</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.title}</option>)}</select></label></div><div className="capture-footer"><span>Landet in deiner Ideen-Inbox</span><button className="button-primary capture-save" onClick={() => void submit()} disabled={!text.trim() || saving}><Check size={16}/> {saving ? "Wird gespeichert …" : "Speichern"}</button></div></section></div>;
+  return <div className="capture-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}><section className="capture-dialog" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div className="capture-top"><div><div className="eyebrow">SCHNELL FESTHALTEN</div><h2 id="capture-title">Was ist dir gerade eingefallen?</h2></div><button className="capture-close" onClick={onClose} disabled={saving} aria-label="Schließen"><X size={19}/></button></div><textarea ref={input} value={text} onChange={(event) => { setText(event.target.value); if (event.target.value) setVoiceHelp(""); }} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submit(); if (event.key === "Escape" && !saving) onClose(); }} placeholder="Ein Satz reicht. Sortieren kannst du später." rows={4}/><div className="capture-options"><button type="button" className={`voice-button ${listening ? "voice-listening" : ""}`} onClick={speak} disabled={saving}><AudioLines size={16}/>{listening ? "Höre zu …" : "Diktieren"}</button><label className="capture-project"><span>Projekt (optional)</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Später entscheiden</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.title}</option>)}</select></label>{voiceHelp && <small className="capture-voice-help" role="status">{voiceHelp}</small>}</div>{saveError && <p className="capture-save-error" role="alert">{saveError}</p>}<div className="capture-footer"><span>Landet in deiner Ideen-Inbox</span><button type="button" className="button-primary capture-save" onClick={() => void submit()} disabled={!text.trim() || saving}><Check size={16}/> {saving ? "Wird gespeichert …" : "Speichern"}</button></div></section></div>;
 }
 
 function SettingsScreen({ data, online, haState, onBuildDay, onRestore, onNotify, onKanban, onBrain, onIntegrations, onMedia, onPlanning }: { onIntegrations: () => void; onMedia: () => void; onPlanning: () => void; onBrain: () => void; onKanban: () => void; data: CreatorState; online: boolean; haState: string; onBuildDay: (day: string) => void; onRestore: (state: CreatorState) => void; onNotify: (message: string) => void }) {
